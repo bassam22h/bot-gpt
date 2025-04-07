@@ -146,14 +146,12 @@ async def platform_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def generate_post_content(user_input: str, platform: str) -> str:
     try:
-        system_prompt = f"""أنت مساعد محترف لإنشاء منشورات على {platform}. اتبع هذه التعليمات:
-        - اكتب محتوى عالي الجودة باللغة العربية الفصحى
-        - استخدم لغة سهلة وجذابة
-        - لا تستخدم أي تنسيقات Markdown مثل ** أو __
+        system_prompt = f"""أنت مساعد محترف لإنشاء منشورات على {platform}. اتبع هذه التعليمات بدقة:
+        - احتفظ بجميع علامات الهاشتاق (#) والوصلات (_) الموجودة في النص الأصلي
+        - لا تقم بإزالة أو تعديل أي هاشتاق أو علامة خاصة
         - استخدم 3-5 إيموجيز بشكل مناسب
         - اجعل الجمل قصيرة وواضحة
-        - تجنب التكرار واستخدم مرادفات متنوعة
-        - التركيز على المعلومات الفريدة والمثيرة للاهتمام"""
+        - أضف 2-3 هاشتاقات جديدة ذات صلة إذا لزم الأمر"""
         
         completion = client.chat.completions.create(
             extra_headers={
@@ -168,9 +166,10 @@ async def generate_post_content(user_input: str, platform: str) -> str:
             ]
         )
         
-        clean_text = completion.choices[0].message.content
-        clean_text = re.sub(r'[\*\_\#\~]', '', clean_text)
-        return clean_text.strip()
+        # تنظيف النص مع الحفاظ على الهاشتاقات والوصلات
+        text = completion.choices[0].message.content
+        protected_text = re.sub(r'(?<!\w)[#_](?![\w_])', '', text)  # يحمي فقط العلامات غير الصحيحة
+        return protected_text.strip()
         
     except Exception as e:
         logging.error(f"OpenRouter Error: {e}")
