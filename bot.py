@@ -138,7 +138,7 @@ def main():
             listen="0.0.0.0",
             port=int(os.getenv("PORT", 8443)),
             url_path=TOKEN,
-            webhook_url=f"https://your-render-app.onrender.com/{TOKEN}"
+            webhook_url=f"https://bassam-bot-soc.onrender.com/{TOKEN}"
         )
     else:
         application.run_polling()
