@@ -102,7 +102,7 @@ def main():
             listen="0.0.0.0",
             port=int(os.getenv("PORT", 8443)),
             url_path=TOKEN,
-            webhook_url=f"https://social-bot.onrender.com/{TOKEN}"
+            webhook_url=f"https://social-bot-qmf3.onrender.com/{TOKEN}"
         )
     else:
         application.run_polling()
