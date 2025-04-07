@@ -2,14 +2,15 @@ import os
 import logging
 import re
 from datetime import datetime, timedelta
-from telegram import Update, ReplyKeyboardMarkup
+from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import (
     ApplicationBuilder,
     ContextTypes,
     CommandHandler,
     ConversationHandler,
     MessageHandler,
-    filters
+    filters,
+    CallbackQueryHandler
 )
 from openai import OpenAI
 
@@ -18,10 +19,14 @@ TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 PLATFORM_CHOICE, EVENT_DETAILS = range(2)
 
+# إعدادات القناة الإجبارية (استبدل بالقيم الحقيقية)
+CHANNEL_USERNAME = "@YourChannelUsername"  # مثال: "@MySocialChannel"
+CHANNEL_LINK = "https://t.me/YourChannelUsername"  # مثال: "https://t.me/MySocialChannel"
+
 # تخزين طلبات المستخدمين
 user_requests = {}
 
-# حدود الأحرف لكل منصة (للاستخدام الداخلي فقط)
+# حدود الأحرف لكل منصة
 PLATFORM_LIMITS = {
     "تويتر": 280,
     "لينكدإن": 3000,
@@ -34,7 +39,49 @@ client = OpenAI(
     api_key=OPENROUTER_API_KEY,
 )
 
+### الدوال الجديدة لنظام الاشتراك ###
+async def check_subscription(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    """تحقق مما إذا كان المستخدم مشتركًا في القناة"""
+    user = update.effective_user
+    try:
+        member = await context.bot.get_chat_member(chat_id=CHANNEL_USERNAME, user_id=user.id)
+        return member.status in ["member", "administrator", "creator"]
+    except Exception as e:
+        logging.error(f"Error checking subscription: {e}")
+        return False
+
+async def send_subscription_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """أرسل رسالة تطلب الاشتراك"""
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("📢 اشترك في القناة", url=CHANNEL_LINK)],
+        [InlineKeyboardButton("✅ تم الاشتراك", callback_data="check_subscription")]
+    ])
+    
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text="🔒 للوصول إلى جميع ميزات البوت، يجب الاشتراك في قناتنا:\n"
+             f"{CHANNEL_USERNAME}\n\n"
+             "بعد الاشتراك، اضغط على زر 'تم الاشتراك' للتأكيد",
+        reply_markup=keyboard
+    )
+
+async def check_subscription_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """تحقق من الاشتراك عند الضغط على الزر"""
+    query = update.callback_query
+    await query.answer()
+    
+    if await check_subscription(update, context):
+        await query.edit_message_text("🎉 تم التحقق من اشتراكك بنجاح! يمكنك الآن استخدام البوت عبر /start")
+        await start(update, context)
+    else:
+        await query.edit_message_text("❌ لم نتمكن من التحقق من اشتراكك. تأكد من:\n1. الاشتراك في القناة\n2. عدم إخفاء اشتراكك\nثم اضغط الزر مرة أخرى")
+
+### الدوال الأصلية (تم تعديلها لدعم نظام الاشتراك) ###
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await check_subscription(update, context):
+        await send_subscription_message(update, context)
+        return
+    
     welcome_text = """
     🎉 أهلاً بك في بوت إنشاء المنشورات الذكي!
 
@@ -56,9 +103,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(welcome_text)
 
 async def generate_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await check_subscription(update, context):
+        await send_subscription_message(update, context)
+        return
+    
     user_id = update.message.from_user.id
     
-    # التحقق من عدد الطلبات
     if not check_user_limit(user_id):
         await update.message.reply_text("⚠️ لقد وصلت إلى الحد الأقصى من الطلبات لهذا اليوم (5 طلبات).")
         return ConversationHandler.END
@@ -74,6 +124,7 @@ async def generate_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return PLATFORM_CHOICE
 
+### الدوال الأصلية (بدون تعديلات) ###
 def check_user_limit(user_id):
     today = datetime.now().date()
     if user_id not in user_requests:
@@ -95,7 +146,6 @@ async def platform_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def generate_post_content(user_input: str, platform: str) -> str:
     try:
-        # تعليمات مفصلة للنموذج لتحسين الجودة
         system_prompt = f"""أنت مساعد محترف لإنشاء منشورات على {platform}. اتبع هذه التعليمات:
         - اكتب محتوى عالي الجودة باللغة العربية الفصحى
         - استخدم لغة سهلة وجذابة
@@ -118,9 +168,8 @@ async def generate_post_content(user_input: str, platform: str) -> str:
             ]
         )
         
-        # تنظيف النص من أي تنسيقات غير مرغوبة
         clean_text = completion.choices[0].message.content
-        clean_text = re.sub(r'[\*\_\#\~]', '', clean_text)  # إزالة * _ # ~
+        clean_text = re.sub(r'[\*\_\#\~]', '', clean_text)
         return clean_text.strip()
         
     except Exception as e:
@@ -132,7 +181,6 @@ async def event_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_input = update.message.text
     platform = context.user_data["platform"]
     
-    # إرسال رسالة الانتظار
     wait_msg = await update.message.reply_text("⏳ جاري معالجة طلبك، الرجاء الانتظار...")
     
     try:
@@ -143,13 +191,11 @@ async def event_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_requests[user_id]['count'] += 1
         generated_text = await generate_post_content(user_input, platform)
         
-        # حذف رسالة الانتظار
         await context.bot.delete_message(
             chat_id=update.message.chat_id,
             message_id=wait_msg.message_id
         )
         
-        # تقسيم النص إذا كان طويلاً جداً
         if len(generated_text) > 1000:
             parts = [generated_text[i:i+1000] for i in range(0, len(generated_text), 1000)]
             for part in parts:
@@ -167,13 +213,15 @@ async def event_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 def main():
-    # تكوين نظام التسجيل
     logging.basicConfig(
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         level=logging.INFO
     )
     
     application = ApplicationBuilder().token(TOKEN).build()
+    
+    # إضافة معالج الاشتراك الجديد
+    application.add_handler(CallbackQueryHandler(check_subscription_callback, pattern="^check_subscription$"))
     
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("generate", generate_post)],
@@ -187,7 +235,6 @@ def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(conv_handler)
     
-    # إعدادات النشر على Render
     if os.getenv("RENDER"):
         application.run_webhook(
             listen="0.0.0.0",
