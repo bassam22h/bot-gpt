@@ -20,7 +20,7 @@ OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 PLATFORM_CHOICE, EVENT_DETAILS = range(2)
 
 # إعدادات القناة الإجبارية (استبدل بالقيم الحقيقية)
-CHANNEL_USERNAME = "@YourChannelUsername"  # مثال: "@MySocialChannel"
+CHANNEL_USERNAME = "@aitools_ar"  # مثال: "@MySocialChannel"
 CHANNEL_LINK = "https://t.me/aitools_ar"  # مثال: "https://t.me/MySocialChannel"
 
 # تخزين طلبات المستخدمين
