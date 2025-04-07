@@ -1,5 +1,6 @@
 import os
 import logging
+from datetime import datetime, timedelta
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder,
@@ -16,7 +17,10 @@ TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 PLATFORM_CHOICE, EVENT_DETAILS = range(2)
 
-# حدود الأحرف لكل منصة
+# تخزين طلبات المستخدمين
+user_requests = {}
+
+# حدود الأحرف لكل منصة (مخفي الآن)
 PLATFORM_LIMITS = {
     "تويتر": 280,
     "لينكدإن": 3000,
@@ -42,15 +46,22 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     4. سيقوم البوت بإرسال المنشور الجاهز لك
 
     🏆 المنصات المدعومة:
-    - تويتر (280 حرفًا كحد أقصى)
-    - لينكدإن (3000 حرفًا كحد أقصى)
-    - إنستغرام (2200 حرفًا كحد أقصى)
+    - تويتر
+    - لينكدإن
+    - إنستغرام
 
-    💡 يمكنك إضافة إيموجيز وتنسيق النص كما تريد!
+    ⚠️ الحد المسموح: 5 طلبات يومياً لكل مستخدم
     """
     await update.message.reply_text(welcome_text)
 
 async def generate_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.from_user.id
+    
+    # التحقق من عدد الطلبات
+    if not check_user_limit(user_id):
+        await update.message.reply_text("⚠️ لقد وصلت إلى الحد الأقصى من الطلبات لهذا اليوم (5 طلبات).")
+        return ConversationHandler.END
+        
     reply_keyboard = [["تويتر", "لينكدإن", "إنستغرام"]]
     await update.message.reply_text(
         "📱 اختر منصة التواصل الاجتماعي:",
@@ -62,12 +73,22 @@ async def generate_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return PLATFORM_CHOICE
 
+def check_user_limit(user_id):
+    today = datetime.now().date()
+    if user_id not in user_requests:
+        user_requests[user_id] = {'date': today, 'count': 0}
+    
+    if user_requests[user_id]['date'] != today:
+        user_requests[user_id] = {'date': today, 'count': 0}
+    
+    return user_requests[user_id]['count'] < 5
+
 async def platform_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     platform = update.message.text
     context.user_data["platform"] = platform
     await update.message.reply_text(
         f"✍️ الآن، اكتب محتوى المنشور الذي تريد إنشاؤه لـ {platform}:\n"
-        "(يمكنك كتابة فكرة عامة أو نقاط رئيسية)"
+        "(سيتم إعلامك عند اكتمال الإنشاء)"
     )
     return EVENT_DETAILS
 
@@ -82,7 +103,7 @@ async def generate_post_content(user_input: str, platform: str) -> str:
             messages=[
                 {
                     "role": "system",
-                    "content": f"أنت مساعد لإنشاء منشورات لـ {platform}. أنشئ منشورًا جذابًا باللغة العربية مع إيموجيز مناسبة. الحد الأقصى {PLATFORM_LIMITS[platform]} حرف."
+                    "content": f"أنشئ منشورًا لـ {platform} باللغة العربية. استخدم إيموجيز واجعل المحتوى جذابًا."
                 },
                 {
                     "role": "user",
@@ -96,24 +117,28 @@ async def generate_post_content(user_input: str, platform: str) -> str:
         raise
 
 async def event_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.from_user.id
     user_input = update.message.text
     platform = context.user_data["platform"]
     
+    # إرسال رسالة الانتظار
+    wait_msg = await update.message.reply_text("⏳ جاري إنشاء المنشور، يرجى الانتظار...")
+    
     try:
+        # زيادة عدد الطلبات
+        user_requests[user_id]['count'] += 1
+        
         generated_text = await generate_post_content(user_input, platform)
         
-        if len(generated_text) > PLATFORM_LIMITS[platform]:
-            warning = f"⚠️ تنبيه: تجاوز عدد الأحرف المسموح به ({PLATFORM_LIMITS[platform]} حرف)"
-            await update.message.reply_text(warning)
+        # حذف رسالة الانتظار
+        await context.bot.delete_message(chat_id=update.message.chat_id, message_id=wait_msg.message_id)
         
-        await update.message.reply_text("✅ تم إنشاء المنشور بنجاح:\n\n" + generated_text)
+        # إرسال المنشور النهائي بدون أي إضافات
+        await update.message.reply_text(generated_text)
         
     except Exception as e:
         logging.error(f"Error: {e}")
-        await update.message.reply_text(
-            "❌ حدث خطأ أثناء إنشاء المنشور. يرجى المحاولة لاحقًا.\n"
-            "إذا استمرت المشكلة، تأكد من أنك لم تتجاوز الحد المسموح من الطلبات."
-        )
+        await update.message.reply_text("❌ حدث خطأ أثناء إنشاء المنشور. يرجى المحاولة لاحقًا.")
     
     return ConversationHandler.END
 
@@ -138,7 +163,7 @@ def main():
             listen="0.0.0.0",
             port=int(os.getenv("PORT", 8443)),
             url_path=TOKEN,
-            webhook_url=f"https://bassam-bot-soc.onrender.com/{TOKEN}"
+            webhook_url=f"https://your-render-app.onrender.com/{TOKEN}"
         )
     else:
         application.run_polling()
