@@ -60,7 +60,7 @@ async def send_subscription_message(update: Update, context: ContextTypes.DEFAUL
     await context.bot.send_message(
         chat_id=update.effective_chat.id,
         text="🔒 للوصول إلى جميع ميزات البوت، يجب الاشتراك في قناتنا:\n"
-             f"{CHANNEL_USERNAME}\n\n"
+             f"{سوق الرقميات}\n\n"
              "بعد الاشتراك، اضغط على زر 'تم الاشتراك' للتأكيد",
         reply_markup=keyboard
     )
