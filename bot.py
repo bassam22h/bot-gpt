@@ -21,7 +21,7 @@ PLATFORM_CHOICE, EVENT_DETAILS = range(2)
 
 # إعدادات القناة الإجبارية (استبدل بالقيم الحقيقية)
 CHANNEL_USERNAME = "@YourChannelUsername"  # مثال: "@MySocialChannel"
-CHANNEL_LINK = "https://t.me/YourChannelUsername"  # مثال: "https://t.me/MySocialChannel"
+CHANNEL_LINK = "https://t.me/aitools_ar"  # مثال: "https://t.me/MySocialChannel"
 
 # تخزين طلبات المستخدمين
 user_requests = {}
