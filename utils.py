@@ -6,8 +6,7 @@ from telegram.constants import ChatMemberStatus
 from telegram.ext import ContextTypes
 
 USERS_FILE = "data/users.json"
-# نحذف @ من بداية اسم المستخدم إذا كانت موجودة
-CHANNEL_USERNAME = os.getenv("CHANNEL_USERNAME").lstrip("@")
+CHANNEL_USERNAME = os.getenv("CHANNEL_USERNAME")  # تأكد أنه بدون @ في .env
 
 def load_users():
     if not os.path.exists(USERS_FILE):
@@ -57,6 +56,7 @@ def require_subscription(func):
     async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
         user_id = update.effective_user.id
         try:
+            # التحقق من الاشتراك باستخدام اسم المستخدم للقناة
             member = await context.bot.get_chat_member(CHANNEL_USERNAME, user_id)
             if member.status in [ChatMemberStatus.MEMBER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.OWNER]:
                 return await func(update, context, *args, **kwargs)
