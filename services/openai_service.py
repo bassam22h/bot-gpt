@@ -28,7 +28,7 @@ async def generate_post(user_input, platform):
 
     try:
         response = client.chat.completions.create(
-            model="meta-llama/llama-3-70b-instruct",
+            model="deepseek/deepseek-v3-base:free",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_input}
