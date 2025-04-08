@@ -4,11 +4,14 @@ from config import CHANNEL_USERNAME, CHANNEL_LINK
 from .generate import generate_post_handler
 from utils import load_users, save_users
 
+# تنظيف اسم القناة في حال كان يحتوي على @
+clean_channel_username = CHANNEL_USERNAME.replace("@", "")
+
 async def check_subscription(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     user = update.effective_user
     try:
         # التحقق من الاشتراك باستخدام اسم المستخدم للقناة
-        member = await context.bot.get_chat_member(chat_id=CHANNEL_USERNAME, user_id=user.id)
+        member = await context.bot.get_chat_member(chat_id=f"@{clean_channel_username}", user_id=user.id)
         return member.status in ["member", "administrator", "creator"]
     except Exception:
         return False
@@ -19,7 +22,7 @@ async def send_subscription_prompt(update: Update, context: ContextTypes.DEFAULT
         [InlineKeyboardButton("✅ تم الاشتراك", callback_data="check_subscription")]
     ])
     await update.message.reply_text(
-        f"🔒 للوصول إلى جميع ميزات البوت، اشترك في قناتنا: {CHANNEL_USERNAME}\n"
+        f"🔒 للوصول إلى جميع ميزات البوت، اشترك في قناتنا: https://t.me/{clean_channel_username}\n"
         "ثم اضغط 'تم الاشتراك' للتأكيد",
         reply_markup=keyboard
     )
