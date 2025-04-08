@@ -1,8 +1,12 @@
 import json
 import os
 from datetime import datetime
+from telegram import Update
+from telegram.constants import ChatMemberStatus
+from telegram.ext import ContextTypes
 
 USERS_FILE = "data/users.json"
+CHANNEL_ID = os.getenv("CHANNEL_ID")
 
 def load_users():
     if not os.path.exists(USERS_FILE):
@@ -46,3 +50,21 @@ def increment_user_count(user_id):
 def get_total_users():
     users = load_users()
     return len(users)
+
+# ديكوريتر التحقق من الاشتراك
+def require_subscription(func):
+    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
+        user_id = update.effective_user.id
+        try:
+            member = await context.bot.get_chat_member(CHANNEL_ID, user_id)
+            if member.status in [ChatMemberStatus.MEMBER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.OWNER]:
+                return await func(update, context, *args, **kwargs)
+            else:
+                await update.effective_message.reply_text(
+                    "⚠️ يجب عليك الاشتراك في القناة أولاً لاستخدام البوت.\n\nاشترك ثم أعد المحاولة."
+                )
+        except:
+            await update.effective_message.reply_text(
+                "⚠️ حدث خطأ أثناء التحقق من الاشتراك. تأكد أن البوت مشرف في القناة."
+            )
+    return wrapper
