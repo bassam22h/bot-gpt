@@ -6,7 +6,10 @@ from telegram.constants import ChatMemberStatus
 from telegram.ext import ContextTypes
 
 USERS_FILE = "data/users.json"
-CHANNEL_USERNAME = os.getenv("CHANNEL_USERNAME")  # تأكد أنه بدون @ في .env
+
+# نحصل على اسم المستخدم من متغير البيئة ونحذف @ إن وُجدت
+raw_channel_username = os.getenv("CHANNEL_USERNAME", "")
+CHANNEL_USERNAME = raw_channel_username.replace("@", "")  # يصبح فقط: aitools_ar
 
 def load_users():
     if not os.path.exists(USERS_FILE):
@@ -56,8 +59,8 @@ def require_subscription(func):
     async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
         user_id = update.effective_user.id
         try:
-            # التحقق من الاشتراك باستخدام اسم المستخدم للقناة
-            member = await context.bot.get_chat_member(CHANNEL_USERNAME, user_id)
+            # التحقق من الاشتراك باستخدام اسم المستخدم للقناة (بدون @)
+            member = await context.bot.get_chat_member(f"@{CHANNEL_USERNAME}", user_id)
             if member.status in [ChatMemberStatus.MEMBER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.OWNER]:
                 return await func(update, context, *args, **kwargs)
             else:
@@ -66,8 +69,8 @@ def require_subscription(func):
                     f"اشترك هنا: https://t.me/{CHANNEL_USERNAME}\n"
                     "ثم أعد المحاولة."
                 )
-        except:
+        except Exception as e:
             await update.effective_message.reply_text(
-                "⚠️ حدث خطأ أثناء التحقق من الاشتراك. تأكد أن البوت مشرف في القناة."
+                f"⚠️ حدث خطأ أثناء التحقق من الاشتراك: {e}"
             )
     return wrapper
