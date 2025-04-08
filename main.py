@@ -1,4 +1,5 @@
 import logging
+import os
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, CallbackQueryHandler, ConversationHandler, MessageHandler, filters
 )
@@ -8,6 +9,8 @@ from handlers.generate import generate_post_handler, platform_choice, event_deta
 
 def main():
     logging.basicConfig(level=logging.INFO)
+    webhook_url = f"https://{os.getenv('RENDER_APP_NAME')}.onrender.com/{TOKEN}"
+
     app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start_handler))
@@ -22,7 +25,16 @@ def main():
         fallbacks=[]
     )
     app.add_handler(conv)
-    app.run_polling()
+
+    if os.getenv("RENDER"):
+        app.run_webhook(
+            listen="0.0.0.0",
+            port=8443,
+            url_path=TOKEN,
+            webhook_url=webhook_url
+        )
+    else:
+        app.run_polling()
 
 if __name__ == "__main__":
     main()
