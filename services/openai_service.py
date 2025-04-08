@@ -27,17 +27,19 @@ async def generate_post(user_input, platform):
 4. أضف {platform_rules[platform]["hashtags"]} في النهاية"""
 
     try:
-        response = client.chat.completions.create(
+        completion = client.chat.completions.create(
+            extra_headers={
+                "HTTP-Referer": "<YOUR_SITE_URL>",  # يمكن إضافة الموقع الخاص بك
+                "X-Title": "<YOUR_SITE_NAME>",      # يمكن إضافة اسم الموقع
+            },
             model="deepseek/deepseek-v3-base:free",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_input}
-            ],
-            temperature=0.5,
-            max_tokens=1000
+            ]
         )
-        result = response.choices[0].message.content
+        result = completion.choices[0].message.content
         return clean_text(result)
     except Exception as e:
-        logging.error(f"OpenAI Error: {e}")
+        logging.error(f"Error while generating post: {e}")
         return "❌ حدث خطأ أثناء إنشاء المنشور."
