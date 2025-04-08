@@ -1,12 +1,13 @@
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import (
-    ContextTypes, ConversationHandler, MessageHandler, filters
+    ContextTypes, ConversationHandler
 )
 from services.openai_service import generate_post
-from utils import get_user_limit_status, increment_user_count
+from utils import get_user_limit_status, increment_user_count, require_subscription
 
 PLATFORM_CHOICE, EVENT_DETAILS = range(2)
 
+@require_subscription
 async def generate_post_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if not get_user_limit_status(user_id):
@@ -20,12 +21,14 @@ async def generate_post_handler(update: Update, context: ContextTypes.DEFAULT_TY
     )
     return PLATFORM_CHOICE
 
+@require_subscription
 async def platform_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     platform = update.message.text
     context.user_data["platform"] = platform
     await update.message.reply_text("✍️ أرسل الآن فكرة المنشور أو نصه:")
     return EVENT_DETAILS
 
+@require_subscription
 async def event_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     platform = context.user_data.get("platform")
