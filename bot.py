@@ -145,39 +145,38 @@ async def platform_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def generate_post_content(user_input: str, platform: str) -> str:
     try:
-        system_prompt = f"""You are an expert Arabic content creator for {platform}. Strict rules:
-        1. Output ONLY in Modern Standard Arabic
-        2. Preserve ALL original hashtags/underscores EXACTLY
-        3. Use 3-5 relevant emojis max
-        4. Max length: {PLATFORM_LIMITS[platform]} chars
-        5. Structure: 2-4 concise lines + 3-5 hashtags
-        6. Never include English text/explanations
-        7. Maintain original meaning precisely
+        system_prompt = f"""أنت كاتب محتوى محترف للغة العربية فقط. اتبع القواعد التالية بدقة:
+        1. الإخراج باللغة العربية الفصحى فقط (ممنوع أي كلمات إنجليزية)
+        2. الحفاظ على جميع الهاشتاقات (#) والوصلات (_) الأصلية دون تغيير
+        3. استخدام 3-5 إيموجي كحد أقصى
+        4. الطول الأقصى: {PLATFORM_LIMITS[platform]} حرفاً
+        5. الهيكل: 2-3 جمل قصيرة + 3-5 هاشتاقات
+        6. ممنوع كتابة أي شروحات أو تفاصيل تقنية
+        7. الحفاظ على المعنى الأصلي بدقة
         
-        Example format:
-        النص الرئيسي ☕✨
-        تفاصيل إضافية 🌱
-        #هاشتاق_أصلي #هاشتاق_جديد 🇾🇪"""
+        مثال للنتيجة المطلوبة:
+        فرص جديدة لتطوير مهارات الشباب 🚀
+        شراكة بين القطاعين العام والخاص لمواجهة البطالة 🤝
+        #توظيف #تمكين_الشباب 🇸🇦"""
         
         completion = client.chat.completions.create(
             extra_headers={
                 "HTTP-Referer": "https://social-bot.com",
                 "X-Title": "Telegram Social Bot",
-                "X-Data-Policy": "train"
             },
-            model="deepseek/deepseek-r1:free",
+            model="meta/llama-3-70b-instruct",  # نموذج أكثر دقة
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_input}
             ],
-            temperature=0.7
+            temperature=0.5  # تقليل الإبداع لزيادة الدقة
         )
         
-        # تنظيف النص النهائي
+        # التنظيف النهائي للنص
         text = completion.choices[0].message.content
-        clean_text = re.sub(r'(?<![\w#])[#_](?![\w_])', '', text)  # يحافظ على الهاشتاقات الصحيحة
-        arabic_only = re.sub(r'[^\w\s#_ء-ي٠-٩٠-٩،؟!ـ]', '', clean_text)  # إزالة أي أحرف غير عربية
-        return arabic_only.strip()
+        arabic_only = re.sub(r'[^\w\s#_،؛:؟!ـء-ي٠-٩]', '', text)  # إزالة أي أحرف غير عربية
+        final_text = re.sub(r'\n\s*\n', '\n', arabic_only)  # إزالة الأسطر الفارغة
+        return final_text.strip()
         
     except Exception as e:
         logging.error(f"OpenRouter Error: {e}")
