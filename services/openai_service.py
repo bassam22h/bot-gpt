@@ -36,8 +36,14 @@ async def generate_post(user_input, platform):
             temperature=0.5,
             max_tokens=1000
         )
-        result = response.choices[0].message.content
-        return clean_text(result)
+
+        if response.choices and response.choices[0].message.content.strip():
+            result = response.choices[0].message.content
+            return clean_text(result)
+        else:
+            logging.error("Response is empty or invalid")
+            return "❌ لم يتم توليد رد من النموذج. حاول مرة أخرى أو جرّب نصًا مختلفًا."
+
     except Exception as e:
         logging.error(f"OpenAI Error: {e}")
         return "❌ حدث خطأ أثناء إنشاء المنشور."
