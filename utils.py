@@ -6,7 +6,7 @@ from telegram.constants import ChatMemberStatus
 from telegram.ext import ContextTypes
 
 USERS_FILE = "data/users.json"
-CHANNEL_USERNAME = os.getenv("CHANNEL_USERNAME")  # استخدام اسم المستخدم للقناة
+CHANNEL_USERNAME = os.getenv("CHANNEL_USERNAME")  # تأكد أنه بدون @ في .env
 
 def load_users():
     if not os.path.exists(USERS_FILE):
@@ -62,7 +62,9 @@ def require_subscription(func):
                 return await func(update, context, *args, **kwargs)
             else:
                 await update.effective_message.reply_text(
-                    "⚠️ يجب عليك الاشتراك في القناة أولاً لاستخدام البوت.\n\nاشترك ثم أعد المحاولة."
+                    f"⚠️ يجب عليك الاشتراك في القناة أولاً لاستخدام البوت.\n\n"
+                    f"اشترك هنا: https://t.me/{CHANNEL_USERNAME}\n"
+                    "ثم أعد المحاولة."
                 )
         except:
             await update.effective_message.reply_text(
