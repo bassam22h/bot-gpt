@@ -1,12 +1,14 @@
-import json
 import os
-from datetime import datetime
-from telegram import Update
-from telegram.constants import ChatMemberStatus
+import logging
+from telegram import Bot, Update
 from telegram.ext import ContextTypes
+from datetime import datetime
+import json
 
+# جلب متغيرات البيئة
+CHANNEL_USERNAME = os.getenv("CHANNEL_USERNAME")
+ADMIN_ID = int(os.getenv("ADMIN_ID"))
 USERS_FILE = "data/users.json"
-CHANNEL_ID = os.getenv("CHANNEL_ID")
 
 def load_users():
     if not os.path.exists(USERS_FILE):
@@ -51,20 +53,26 @@ def get_total_users():
     users = load_users()
     return len(users)
 
-# ديكوريتر التحقق من الاشتراك
-def require_subscription(func):
-    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
-        user_id = update.effective_user.id
-        try:
-            member = await context.bot.get_chat_member(CHANNEL_ID, user_id)
-            if member.status in [ChatMemberStatus.MEMBER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.OWNER]:
-                return await func(update, context, *args, **kwargs)
-            else:
-                await update.effective_message.reply_text(
-                    "⚠️ يجب عليك الاشتراك في القناة أولاً لاستخدام البوت.\n\nاشترك ثم أعد المحاولة."
-                )
-        except:
-            await update.effective_message.reply_text(
-                "⚠️ حدث خطأ أثناء التحقق من الاشتراك. تأكد أن البوت مشرف في القناة."
-            )
-    return wrapper
+# التحقق من الاشتراك في القناة
+async def check_subscription(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """التحقق من اشتراك المستخدم في القناة."""
+    user_id = update.effective_user.id
+    bot = context.bot
+
+    try:
+        # التحقق من الاشتراك في القناة باستخدام اسم المستخدم
+        member = await bot.get_chat_member(CHANNEL_USERNAME, user_id)
+        if member.status in ['member', 'administrator', 'creator']:
+            return True  # المستخدم مشترك في القناة
+        else:
+            return False  # المستخدم غير مشترك في القناة
+    except Exception as e:
+        logging.error(f"Error checking subscription: {e}")
+        return False  # إذا حدث خطأ في التحقق، يُعتبر غير مشترك
+
+async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """التعامل مع أمر /start."""
+    if await check_subscription(update, context):
+        await update.message.reply_text("✅ مرحبًا بك! أنت مشترك في القناة.")
+    else:
+        await update.message.reply_text("⚠️ يجب أن تشترك في القناة أولاً.")
