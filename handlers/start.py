@@ -2,6 +2,7 @@ from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes
 from config import CHANNEL_USERNAME, CHANNEL_LINK
 from .generate import generate_post_handler
+from utils import load_users, save_users
 
 async def check_subscription(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     user = update.effective_user
@@ -31,9 +32,19 @@ async def check_subscription_callback(update: Update, context: ContextTypes.DEFA
         await query.edit_message_text("❌ لم نتمكن من التحقق. تأكد من الاشتراك في القناة ثم أعد المحاولة.")
 
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+
+    # حفظ المستخدم إذا لم يكن مسجلاً
+    users = load_users()
+    if str(user.id) not in users:
+        from datetime import datetime
+        users[str(user.id)] = {"date": str(datetime.utcnow().date()), "count": 0}
+        save_users(users)
+
     if not await check_subscription(update, context):
         await send_subscription_prompt(update, context)
         return
+
     await update.message.reply_text(
         "🎉 مرحباً بك في بوت المنشورات الذكية!\n"
         "استخدم /generate لإنشاء منشور احترافي لمنصات التواصل الاجتماعي."
