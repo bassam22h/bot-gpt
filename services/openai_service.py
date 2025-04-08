@@ -20,30 +20,26 @@ async def generate_post(user_input, platform):
         "إنستغرام": {"length": "220-400 حرفاً", "hashtags": "4-5 هاشتاقات"},
     }
 
-    system_prompt = f"""أنت كاتب محتوى محترف لمنصة {platform}. استخدم اللغة العربية فقط.
-1. طول المنشور: {platform_rules[platform]["length"]}
-2. استخدم 3-5 إيموجي مناسبة
-3. قسّم المنشور إلى مقدمة، نقاط رئيسية، وخاتمة
-4. أضف {platform_rules[platform]["hashtags"]} في النهاية"""
+    system_prompt = (
+        f"اكتب منشوراً احترافياً على منصة {platform} باللغة العربية.\n"
+        f"1. الطول المطلوب: {platform_rules[platform]['length']}\n"
+        f"2. استخدم بعض الإيموجي.\n"
+        f"3. قسّم المحتوى إلى مقدمة ونقاط وخاتمة.\n"
+        f"4. أضف {platform_rules[platform]['hashtags']} في النهاية."
+    )
 
     try:
         response = client.chat.completions.create(
-            model="deepseek/deepseek-v3-base:free",
+            model="meta-llama/llama-3-8b-instruct:free",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_input}
             ],
-            temperature=0.5,
+            temperature=0.7,
             max_tokens=1000
         )
-
-        if response.choices and response.choices[0].message.content.strip():
-            result = response.choices[0].message.content
-            return clean_text(result)
-        else:
-            logging.error("Response is empty or invalid")
-            return "❌ لم يتم توليد رد من النموذج. حاول مرة أخرى أو جرّب نصًا مختلفًا."
-
+        result = response.choices[0].message.content
+        return clean_text(result)
     except Exception as e:
         logging.error(f"OpenAI Error: {e}")
         return "❌ حدث خطأ أثناء إنشاء المنشور."
