@@ -19,9 +19,9 @@ TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 PLATFORM_CHOICE, EVENT_DETAILS = range(2)
 
-# إعدادات القناة الإجبارية (استبدل بالقيم الحقيقية)
-CHANNEL_USERNAME = "@aitools_ar"  # مثال: "@MySocialChannel"
-CHANNEL_LINK = "https://t.me/aitools_ar"  # مثال: "https://t.me/MySocialChannel"
+# إعدادات القناة الإجبارية
+CHANNEL_USERNAME = "@aitools_ar"
+CHANNEL_LINK = "https://t.me/aitools_ar"
 
 # تخزين طلبات المستخدمين
 user_requests = {}
@@ -39,7 +39,7 @@ client = OpenAI(
     api_key=OPENROUTER_API_KEY,
 )
 
-### الدوال الجديدة لنظام الاشتراك ###
+### نظام الاشتراك الإجباري ###
 async def check_subscription(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     """تحقق مما إذا كان المستخدم مشتركًا في القناة"""
     user = update.effective_user
@@ -76,7 +76,7 @@ async def check_subscription_callback(update: Update, context: ContextTypes.DEFA
     else:
         await query.edit_message_text("❌ لم نتمكن من التحقق من اشتراكك. تأكد من:\n1. الاشتراك في القناة\n2. عدم إخفاء اشتراكك\nثم اضغط الزر مرة أخرى")
 
-### الدوال الأصلية (تم تعديلها لدعم نظام الاشتراك) ###
+### الدوال الرئيسية ###
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await check_subscription(update, context):
         await send_subscription_message(update, context)
@@ -94,9 +94,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     4. سيقوم البوت بإرسال المنشور الجاهز لك
 
     🏆 المنصات المدعومة:
-    - تويتر (منشورات قصيرة)
-    - لينكدإن (منشورات متوسطة)
-    - إنستغرام (منشورات طويلة)
+    - تويتر (280 حرفًا كحد أقصى)
+    - لينكدإن (3000 حرفًا كحد أقصى)
+    - إنستغرام (2200 حرفًا كحد أقصى)
 
     ⚠️ الحد المسموح: 5 طلبات يومياً لكل مستخدم
     """
@@ -124,7 +124,6 @@ async def generate_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return PLATFORM_CHOICE
 
-### الدوال الأصلية (بدون تعديلات) ###
 def check_user_limit(user_id):
     today = datetime.now().date()
     if user_id not in user_requests:
@@ -146,12 +145,19 @@ async def platform_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def generate_post_content(user_input: str, platform: str) -> str:
     try:
-        system_prompt = f"""أنت مساعد محترف لإنشاء منشورات على {platform}. اتبع هذه التعليمات بدقة:
-        - احتفظ بجميع علامات الهاشتاق (#) والوصلات (_) الموجودة في النص الأصلي
-        - لا تقم بإزالة أو تعديل أي هاشتاق أو علامة خاصة
-        - استخدم 3-5 إيموجيز بشكل مناسب
-        - اجعل الجمل قصيرة وواضحة
-        - أضف 2-3 هاشتاقات جديدة ذات صلة إذا لزم الأمر"""
+        system_prompt = f"""You are an expert Arabic content creator for {platform}. Strict rules:
+        1. Output ONLY in Modern Standard Arabic
+        2. Preserve ALL original hashtags/underscores EXACTLY
+        3. Use 3-5 relevant emojis max
+        4. Max length: {PLATFORM_LIMITS[platform]} chars
+        5. Structure: 2-4 concise lines + 3-5 hashtags
+        6. Never include English text/explanations
+        7. Maintain original meaning precisely
+        
+        Example format:
+        النص الرئيسي ☕✨
+        تفاصيل إضافية 🌱
+        #هاشتاق_أصلي #هاشتاق_جديد 🇾🇪"""
         
         completion = client.chat.completions.create(
             extra_headers={
@@ -163,13 +169,15 @@ async def generate_post_content(user_input: str, platform: str) -> str:
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_input}
-            ]
+            ],
+            temperature=0.7
         )
         
-        # تنظيف النص مع الحفاظ على الهاشتاقات والوصلات
+        # تنظيف النص النهائي
         text = completion.choices[0].message.content
-        protected_text = re.sub(r'(?<!\w)[#_](?![\w_])', '', text)  # يحمي فقط العلامات غير الصحيحة
-        return protected_text.strip()
+        clean_text = re.sub(r'(?<![\w#])[#_](?![\w_])', '', text)  # يحافظ على الهاشتاقات الصحيحة
+        arabic_only = re.sub(r'[^\w\s#_ء-ي٠-٩٠-٩،؟!ـ]', '', clean_text)  # إزالة أي أحرف غير عربية
+        return arabic_only.strip()
         
     except Exception as e:
         logging.error(f"OpenRouter Error: {e}")
@@ -219,7 +227,6 @@ def main():
     
     application = ApplicationBuilder().token(TOKEN).build()
     
-    # إضافة معالج الاشتراك الجديد
     application.add_handler(CallbackQueryHandler(check_subscription_callback, pattern="^check_subscription$"))
     
     conv_handler = ConversationHandler(
