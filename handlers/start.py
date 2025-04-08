@@ -7,6 +7,7 @@ from utils import load_users, save_users
 async def check_subscription(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     user = update.effective_user
     try:
+        # التحقق من الاشتراك باستخدام اسم المستخدم للقناة
         member = await context.bot.get_chat_member(chat_id=CHANNEL_USERNAME, user_id=user.id)
         return member.status in ["member", "administrator", "creator"]
     except Exception:
