@@ -35,6 +35,9 @@ async def send_message_to_all(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 # التحقق من الإحصاءات
 async def show_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # إضافة سجل للتأكد من أن المعالج تم الوصول إليه
+    logging.info(f"Received /stats command from chat ID: {update.message.chat.id}")
+
     if update.message.chat.id != ADMIN_ID:
         await update.message.reply("ليس لديك صلاحية لعرض الإحصاءات.")
         return
