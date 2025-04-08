@@ -24,12 +24,35 @@ aclient = AsyncOpenAI(
     api_key=API_KEY,
 )
 
+async def clean_content(text):
+    """دالة محسنة لتنظيف المحتوى"""
+    if not text:
+        return ""
+    
+    try:
+        # السماح بالأحرف العربية والترقيم الأساسي
+        arabic_chars = r'[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]'
+        allowed_symbols = r'[#@_،؛:؟!ـ.، \n\-]'
+        numbers = r'[0-9٠-٩]'
+        emojis = r'[\U0001F300-\U0001F5FF\U0001F600-\U0001F64F\U0001F680-\U0001F6FF\u2600-\u26FF\u2700-\u27BF]'
+        
+        pattern = fr'[^{arabic_chars}{allowed_symbols}{numbers}{emojis}]'
+        
+        cleaned = re.sub(pattern, '', str(text))
+        cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
+        cleaned = re.sub(r'[ ]{2,}', ' ', cleaned)
+        return cleaned.strip()
+    
+    except Exception as e:
+        logging.error(f"خطأ في تنظيف المحتوى: {str(e)}")
+        return str(text)[:500]
+
 async def generate_post(user_input, platform, max_retries=3):
-    """نسخة محسنة مع التعامل مع متغيرات البيئة"""
-    config = {
+    """الإصدار النهائي المعدل بدون أخطاء"""
+    platform_config = {
         "تويتر": {
             "model": "deepseek/deepseek-v3-base:free",
-            "max_tokens": 300,
+            "max_tokens": 280,
             "template": """
             🌟 {input}\n
             - النقطة الأولى
@@ -52,38 +75,45 @@ async def generate_post(user_input, platform, max_retries=3):
     }
 
     if not API_KEY:
-        return "⚠️ إعدادات النظام غير مكتملة. يرجى مراجعة الإدارة."
+        return "⚠️ إعدادات النظام غير مكتملة (مفتاح API مفقود)"
 
-    if platform not in config:
-        return "⚠️ المنصة غير مدعومة. اختر: تويتر أو لينكدإن"
+    if platform not in platform_config:
+        return "⚠️ المنصة غير مدعومة. الخيارات المتاحة: تويتر، لينكدإن"
 
     for attempt in range(max_retries):
         try:
+            logging.info(f"محاولة إنشاء منشور لـ {platform} (المحاولة {attempt + 1})")
+            
             response = await aclient.chat.completions.create(
-                model=config[platform]["model"],
+                model=platform_config[platform]["model"],
                 messages=[
-                    {"role": "system", "content": config[platform]["template"]},
+                    {
+                        "role": "system", 
+                        "content": platform_config[platform]["template"].format(input=user_input)
+                    },
                     {"role": "user", "content": user_input}
                 ],
                 temperature=0.7,
-                max_tokens=config[platform]["max_tokens"],
+                max_tokens=platform_config[platform]["max_tokens"],
                 timeout=30.0
             )
 
-            if not response.choices:
+            if not response or not response.choices:
                 raise ValueError("استجابة فارغة من الخادم")
 
             content = response.choices[0].message.content
-            return self._clean_content(content)
+            cleaned_content = await clean_content(content)
+            
+            if not cleaned_content or len(cleaned_content) < 30:
+                raise ValueError("المحتوى الناتج غير كافٍ")
+                
+            logging.info("تم إنشاء المنشور بنجاح")
+            return cleaned_content
 
         except Exception as e:
-            logging.error(f"المحاولة {attempt+1} فشلت: {str(e)}")
+            logging.error(f"فشلت المحاولة {attempt + 1}: {str(e)}")
             if attempt < max_retries - 1:
                 await asyncio.sleep(2)
+            continue
     
-    return "⚠️ فشل إنشاء المنشور. يرجى المحاولة لاحقاً."
-
-def _clean_content(text):
-    """تنظيف المحتوى مع التحقق من الجودة"""
-    # ... (نفس دالة التنظيف السابقة)
-    return cleaned_text
+    return "⚠️ تعذر إنشاء المنشور بعد عدة محاولات. يرجى:\n- التحقق من اتصال الإنترنت\n- تعديل الطلب\n- المحاولة لاحقاً"
