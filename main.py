@@ -7,11 +7,8 @@ from telegram.ext import (
 )
 from config import TOKEN, ADMIN_ID
 from handlers.start import start_handler, check_subscription_callback
-from handlers.generate import generate_post_handler, platform_choice, event_details, PLATFORM_CHOICE, EVENT_DETAILS
+from handlers.generate import generate_post_handler, platform_choice, event_details, cancel, PLATFORM_CHOICE, EVENT_DETAILS
 from handlers.admin import admin_panel, handle_admin_actions, receive_broadcast_message
-
-# الاستيراد الجديد لدالة generate_response من openai_service
-from services.openai_service import generate_response
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
     logging.error(f"Error occurred: {context.error}")
@@ -23,21 +20,22 @@ def main():
 
     app = ApplicationBuilder().token(TOKEN).build()
 
-    # الأوامر العامة
+    # أوامر عامة
     app.add_handler(CommandHandler("start", start_handler))
     app.add_handler(CallbackQueryHandler(check_subscription_callback, pattern="^check_subscription$"))
 
+    # المحادثة الخاصة بإنشاء منشور
     conv = ConversationHandler(
         entry_points=[CommandHandler("generate", generate_post_handler)],
         states={
             PLATFORM_CHOICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, platform_choice)],
             EVENT_DETAILS: [MessageHandler(filters.TEXT & ~filters.COMMAND, event_details)],
         },
-        fallbacks=[]
+        fallbacks=[CommandHandler("cancel", cancel)]
     )
     app.add_handler(conv)
 
-    # أوامر المشرف ولوحة التحكم
+    # أوامر المشرف
     app.add_handler(CommandHandler("admin", admin_panel))
     app.add_handler(CallbackQueryHandler(handle_admin_actions, pattern="^(show_stats|send_broadcast)$"))
     app.add_handler(MessageHandler(filters.TEXT & filters.Chat(ADMIN_ID), receive_broadcast_message))
