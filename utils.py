@@ -17,7 +17,10 @@ def load_users():
     ensure_data_file()
     try:
         with open(USERS_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
+            users = json.load(f)
+            if not isinstance(users, dict):
+                return {}
+            return users
     except json.JSONDecodeError:
         return {}
 
@@ -37,12 +40,13 @@ def get_user_limit_status(user_id: int, limit: int = 5) -> bool:
 
 def increment_user_count(user_id: int):
     users = load_users()
-    count = users.get(str(user_id), 0)
+    uid = str(user_id)
 
-    if isinstance(count, dict):
-        count = count.get("count", 0)
+    current = users.get(uid, 0)
+    if isinstance(current, dict):
+        current = current.get("count", 0)
 
-    users[str(user_id)] = count + 1
+    users[uid] = current + 1
     save_users(users)
 
 async def is_user_subscribed(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
