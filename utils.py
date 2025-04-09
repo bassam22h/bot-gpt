@@ -8,7 +8,8 @@ USERS_FILE = "data/users.json"
 REQUIRED_CHANNEL = os.getenv("REQUIRED_CHANNEL")
 
 def ensure_data_file():
-    os.makedirs("data", exist_ok=True)
+    if not os.path.exists("data"):
+        os.makedirs("data")
     if not os.path.exists(USERS_FILE):
         with open(USERS_FILE, "w", encoding="utf-8") as f:
             json.dump({}, f)
@@ -17,10 +18,7 @@ def load_users():
     ensure_data_file()
     try:
         with open(USERS_FILE, "r", encoding="utf-8") as f:
-            users = json.load(f)
-            if not isinstance(users, dict):
-                return {}
-            return users
+            return json.load(f)
     except json.JSONDecodeError:
         return {}
 
@@ -31,28 +29,19 @@ def save_users(users: dict):
 
 def get_user_limit_status(user_id: int, limit: int = 5) -> bool:
     users = load_users()
-    count = users.get(str(user_id), 0)
-
-    if isinstance(count, dict):
-        count = count.get("count", 0)
-
-    return count < limit
+    user_data = users.get(str(user_id), {"count": 0})
+    return user_data.get("count", 0) < limit
 
 def increment_user_count(user_id: int):
     users = load_users()
-    uid = str(user_id)
-
-    current = users.get(uid, 0)
-    if isinstance(current, dict):
-        current = current.get("count", 0)
-
-    users[uid] = current + 1
+    user_data = users.get(str(user_id), {"count": 0})
+    user_data["count"] = user_data.get("count", 0) + 1
+    users[str(user_id)] = user_data
     save_users(users)
 
 async def is_user_subscribed(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
     if not REQUIRED_CHANNEL:
         return True
-
     try:
         member = await context.bot.get_chat_member(REQUIRED_CHANNEL, user_id)
         return member.status in ["member", "creator", "administrator"]
@@ -66,7 +55,7 @@ def require_subscription(func):
 
         try:
             subscribed = await is_user_subscribed(user_id, context)
-        except Exception as e:
+        except Exception:
             await update.message.reply_text("⚠️ حدث خطأ أثناء التحقق من الاشتراك.")
             return
 
