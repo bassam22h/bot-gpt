@@ -2,7 +2,6 @@ from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import (
     ContextTypes, ConversationHandler
 )
-# استيراد دالة generate_response المعدلة من openai_service
 from services.openai_service import generate_response
 from utils import get_user_limit_status, increment_user_count, require_subscription
 
@@ -37,9 +36,7 @@ async def event_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     msg = await update.message.reply_text("⏳ يتم إنشاء المنشور، الرجاء الانتظار...")
 
-    # استخدام دالة generate_response لاستدعاء نموذج OpenRouter
-    image_url = "https://path_to_image"  # ضع رابط الصورة إذا كانت موجودة
-    result = await generate_response(user_input, image_url)
+    result = await generate_response(user_input, platform)
 
     increment_user_count(user_id)
 
