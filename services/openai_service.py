@@ -62,7 +62,7 @@ async def generate_twitter_post(user_input):
                 "HTTP-Referer": SITE_URL,
                 "X-Title": SITE_NAME,
             },
-            model="meta-llama/llama-4-maverick:free",  # تم التعديل هنا
+            model="meta-llama/llama-4-maverick:free",
             messages=[
                 {
                     "role": "system",
@@ -102,7 +102,7 @@ async def generate_post(user_input, platform, max_retries=3):
             "retry_delay": 2
         },
         "لينكدإن": {
-            "model": "meta-llama/llama-4-maverick:free",  # تم التعديل هنا
+            "model": "meta-llama/llama-4-maverick:free",
             "max_tokens": 600,
             "template": """
             🎯 {input}\n\n
@@ -116,7 +116,7 @@ async def generate_post(user_input, platform, max_retries=3):
             "retry_delay": 3
         },
         "إنستغرام": {
-            "model": "meta-llama/llama-4-maverick:free",  # تم التعديل هنا
+            "model": "meta-llama/llama-4-maverick:free",
             "max_tokens": 400,
             "template": """
             ✨ {input}\n\n
@@ -192,3 +192,9 @@ async def generate_post(user_input, platform, max_retries=3):
             continue
     
     return "⚠️ فشل إنشاء المنشور. يرجى:\n- التحقق من اتصال الإنترنت\n- تعديل النص المدخل\n- المحاولة لاحقًا"
+
+# ========== هذه هي الدالة المطلوبة لحل المشكلة ==========
+
+async def generate_response(user_input, platform):
+    """دالة موحدة للاستدعاء من handler"""
+    return await generate_post(user_input, platform)
