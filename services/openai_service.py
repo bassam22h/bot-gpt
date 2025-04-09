@@ -1,10 +1,10 @@
 import re
 import logging
 import os
-import asyncio
 import random
-from openai import OpenAI
+from openai import OpenAI  # مكتبة غير متزامنة
 
+# إعدادات التسجيل
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -14,6 +14,7 @@ logging.basicConfig(
     ]
 )
 
+# إعدادات API
 API_KEY = os.getenv('OPENROUTER_API_KEY')
 if not API_KEY:
     logging.error("OPENROUTER_API_KEY غير موجود في متغيرات البيئة")
@@ -26,34 +27,35 @@ client = OpenAI(
     api_key=API_KEY,
 )
 
-async def clean_content(text):
+def clean_content(text):
     if not text:
         return ""
+
     try:
         arabic_chars = r'[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]'
         allowed_symbols = r'[#@_،؛:؟!ـ.، \n\-*]'
         emojis = r'[\U0001F300-\U0001F5FF\U0001F600-\U0001F64F\U0001F680-\U0001F6FF\u2600-\u26FF\u2700-\u27BF]'
+        
         cleaned = re.sub(fr'[^{arabic_chars}{allowed_symbols}{emojis}]', '', str(text))
         cleaned = re.sub(r'\*+', '•', cleaned)
         cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
         cleaned = re.sub(r'[ ]{2,}', ' ', cleaned)
+        
         return cleaned.strip()
     except Exception as e:
         logging.error(f"خطأ في تنظيف النص: {str(e)}")
         return str(text)[:500]
 
-async def generate_twitter_post(user_input):
+def generate_twitter_post(user_input):
     try:
-        response = await client.chat.completions.create(
+        response = client.chat.completions.create(
             extra_headers={
                 "HTTP-Referer": SITE_URL,
                 "X-Title": SITE_NAME,
             },
             model="meta-llama/llama-4-maverick:free",
             messages=[
-                {
-                    "role": "system",
-                    "content": """
+                {"role": "system", "content": """
                     أنت خبير في كتابة تغريدات عربية فعالة.
                     المطلوب:
                     - لغة عربية فصحى واضحة
@@ -64,12 +66,8 @@ async def generate_twitter_post(user_input):
                     - 2-3 هاشتاقات ذات صلة
                     - 2-3 إيموجي مناسبة
                     - تجنب الرموز الغريبة
-                    """
-                },
-                {
-                    "role": "user",
-                    "content": f"الموضوع: {user_input}"
-                }
+                """},
+                {"role": "user", "content": f"الموضوع: {user_input}"}
             ],
             temperature=0.7,
             max_tokens=300,
@@ -80,7 +78,7 @@ async def generate_twitter_post(user_input):
         logging.error(f"خطأ في إنشاء تغريدة: {str(e)}")
         return None
 
-async def generate_post(user_input, platform, max_retries=3):
+def generate_response(user_input, platform, max_retries=3):
     platform_config = {
         "تويتر": {
             "generator": generate_twitter_post,
@@ -128,11 +126,11 @@ async def generate_post(user_input, platform, max_retries=3):
             logging.info(f"جاري إنشاء منشور لـ {platform} - المحاولة {attempt + 1}")
             
             if platform == "تويتر":
-                content = await generate_twitter_post(user_input)
+                content = platform_config[platform]["generator"](user_input)
                 if not content:
                     raise ValueError("فشل إنشاء التغريدة")
             else:
-                response = await client.chat.completions.create(
+                response = client.chat.completions.create(
                     extra_headers={
                         "HTTP-Referer": SITE_URL,
                         "X-Title": SITE_NAME,
@@ -157,11 +155,10 @@ async def generate_post(user_input, platform, max_retries=3):
                 )
                 content = response.choices[0].message.content
 
-            cleaned_content = await clean_content(content)
-
+            cleaned_content = clean_content(content)
             if not cleaned_content or len(cleaned_content) < 50:
                 raise ValueError("المحتوى الناتج غير كافٍ")
-                
+
             selected_emojis = platform_config[platform]["emojis"]
             if not any(emoji in cleaned_content for emoji in selected_emojis):
                 cleaned_content = f"{random.choice(selected_emojis)} {cleaned_content}"
@@ -171,16 +168,6 @@ async def generate_post(user_input, platform, max_retries=3):
 
         except Exception as e:
             logging.error(f"خطأ في المحاولة {attempt + 1}: {str(e)}")
-            if attempt < max_retries - 1:
-                await asyncio.sleep(platform_config[platform]["retry_delay"])
             continue
 
     return "⚠️ فشل إنشاء المنشور. يرجى:\n- التحقق من اتصال الإنترنت\n- تعديل النص المدخل\n- المحاولة لاحقًا"
-
-# دالة موحدة تربط generate_post بواجهة بسيطة
-async def generate_response(user_input: str, platform: str = "تويتر") -> str:
-    try:
-        return await generate_post(user_input, platform)
-    except Exception as e:
-        logging.error(f"خطأ في توليد الرد العام: {str(e)}")
-        return "⚠️ حدث خطأ أثناء إنشاء المنشور. حاول لاحقًا."
