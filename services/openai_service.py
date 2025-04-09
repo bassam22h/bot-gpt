@@ -81,6 +81,30 @@ async def generate_twitter_post(user_input):
         logging.error(f"خطأ في إنشاء تغريدة: {str(e)}")
         return None
 
+async def generate_response(user_input, max_tokens=600):
+    """دالة عامة لتوليد نصوص من الذكاء الاصطناعي"""
+    try:
+        response = await client.chat.completions.create(
+            extra_headers={
+                "HTTP-Referer": SITE_URL,
+                "X-Title": SITE_NAME,
+            },
+            model="meta-llama/llama-4-maverick:free",
+            messages=[
+                {
+                    "role": "user",
+                    "content": user_input
+                }
+            ],
+            temperature=0.7,
+            max_tokens=max_tokens,
+            timeout=30.0
+        )
+        return await clean_content(response.choices[0].message.content)
+    except Exception as e:
+        logging.error(f"خطأ في توليد الرد العام: {str(e)}")
+        return "حدث خطأ أثناء توليد الرد. حاول مرة أخرى."
+
 async def generate_post(user_input, platform, max_retries=3):
     platform_config = {
         "تويتر": {
@@ -121,6 +145,7 @@ async def generate_post(user_input, platform, max_retries=3):
     if not API_KEY:
         return "⚠️ يرجى التحقق من إعدادات النظام (مفتاح API مفقود)"
 
+    # تصحيح أسماء المنصات المحتملة
     platform_map = {
         "تويتر": "تويتر",
         "twitter": "تويتر",
