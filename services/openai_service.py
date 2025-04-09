@@ -3,7 +3,7 @@ import logging
 import os
 import asyncio
 import random
-from openai import AsyncOpenAI
+from openai import OpenAI  # استخدام OpenAI بدلاً من AsyncOpenAI
 
 # إعدادات التسجيل المتقدمة
 logging.basicConfig(
@@ -24,7 +24,7 @@ if not API_KEY:
 SITE_URL = os.getenv('SITE_URL', 'https://your-site.com')  # اضف هذا في متغيرات البيئة إذا أردت
 SITE_NAME = os.getenv('SITE_NAME', 'My Bot')  # اضف هذا في متغيرات البيئة إذا أردت
 
-aclient = AsyncOpenAI(
+client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
     api_key=API_KEY,
 )
@@ -57,7 +57,7 @@ async def clean_content(text):
 async def generate_twitter_post(user_input):
     """دالة مخصصة لإنشاء منشورات تويتر"""
     try:
-        response = await aclient.chat.completions.create(
+        response = await client.chat.completions.create(
             extra_headers={
                 "HTTP-Referer": SITE_URL,
                 "X-Title": SITE_NAME,
@@ -146,7 +146,7 @@ async def generate_post(user_input, platform, max_retries=3):
                 if not content:
                     raise ValueError("فشل إنشاء التغريدة")
             else:
-                response = await aclient.chat.completions.create(
+                response = await client.chat.completions.create(
                     extra_headers={
                         "HTTP-Referer": SITE_URL,
                         "X-Title": SITE_NAME,
