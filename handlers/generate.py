@@ -41,7 +41,7 @@ async def event_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = await update.message.reply_text("⏳ يتم إنشاء المنشور، الرجاء الانتظار...")
 
     try:
-        result = await generate_response(user_input, platform)
+        result = generate_response(user_input, platform)
         increment_user_count(user_id)
         await context.bot.delete_message(chat_id=msg.chat.id, message_id=msg.message_id)
         await update.message.reply_text(result)
