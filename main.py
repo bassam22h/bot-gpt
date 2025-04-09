@@ -10,6 +10,9 @@ from handlers.start import start_handler, check_subscription_callback
 from handlers.generate import generate_post_handler, platform_choice, event_details, PLATFORM_CHOICE, EVENT_DETAILS
 from handlers.admin import admin_panel, handle_admin_actions, receive_broadcast_message
 
+# الاستيراد الجديد لدالة generate_response من openai_service
+from services.openai_service import generate_response
+
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
     logging.error(f"Error occurred: {context.error}")
 
