@@ -5,6 +5,8 @@ from firebase_admin import credentials, db
 from functools import wraps
 from telegram import Update
 from telegram.ext import ContextTypes
+from datetime import datetime
+from collections import Counter
 
 FIREBASE_CREDENTIALS_JSON = os.getenv("FIREBASE_CREDENTIALS_JSON")
 FIREBASE_DB_URL = "https://ai-postmakerbot-default-rtdb.asia-southeast1.firebasedatabase.app"
@@ -17,6 +19,7 @@ if not firebase_admin._apps:
         'databaseURL': FIREBASE_DB_URL
     })
 
+# بيانات المستخدمين
 def get_user_data(user_id: int):
     ref = db.reference(f"/users/{user_id}")
     data = ref.get()
@@ -37,6 +40,7 @@ def increment_user_count(user_id: int):
     data["count"] = data.get("count", 0) + 1
     save_user_data(user_id, data)
 
+# الاشتراك بالقناة
 async def is_user_subscribed(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
     if not REQUIRED_CHANNEL:
         return True
@@ -58,14 +62,31 @@ def require_subscription(func):
 
         if not subscribed:
             await update.message.reply_text(
-                f"❌ يجب عليك الاشتراك أولاً في القناة للاستفادة من خدمات البوت:\n\nhttps://t.me/{REQUIRED_CHANNEL.replace('@', '')}"
+                f"❌ يجب عليك الاشتراك أولاً في القناة:\n\nhttps://t.me/{REQUIRED_CHANNEL.replace('@', '')}"
             )
             return
 
         return await func(update, context, *args, **kwargs)
     return wrapper
 
-# دالة جديدة: الحصول على عدد الطلبات المستخدمة
-def get_user_count(user_id: int) -> int:
-    data = get_user_data(user_id)
-    return data.get("count", 0)
+# تسجيل المنشورات
+def log_post(user_id: int, platform: str, content: str):
+    timestamp = datetime.utcnow().isoformat()
+    ref = db.reference(f"/logs/{user_id}/{timestamp}")
+    ref.set({
+        "platform": platform,
+        "content": content
+    })
+
+# الإحصائيات
+def get_all_users():
+    ref = db.reference("/users")
+    return ref.get() or {}
+
+def get_all_logs():
+    ref = db.reference("/logs")
+    return ref.get() or {}
+
+def clear_all_users():
+    ref = db.reference("/users")
+    ref.delete()
