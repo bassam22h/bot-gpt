@@ -24,7 +24,7 @@ def get_user_data(user_id: int):
     ref = db.reference(f"/users/{user_id}")
     data = ref.get()
     if data is None:
-        return {"count": 0}
+        return {}
     return data
 
 def save_user_data(user_id: int, data: dict):
@@ -72,7 +72,7 @@ def require_subscription(func):
 # تسجيل المنشورات
 def log_post(user_id: int, platform: str, content: str):
     timestamp = datetime.utcnow().isoformat()
-    sanitized_timestamp = timestamp.replace(".", "-")  # تصحيح العلامات غير المسموح بها
+    sanitized_timestamp = timestamp.replace(".", "-")
     ref = db.reference(f"/logs/{user_id}/{sanitized_timestamp}")
     ref.set({
         "platform": platform,
