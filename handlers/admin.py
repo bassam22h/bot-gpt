@@ -3,7 +3,7 @@ from telegram.ext import ContextTypes
 from config import ADMIN_IDS
 from utils import (
     get_all_users, get_all_logs, reset_user_counts,
-    clear_all_logs, get_new_users_today, get_platform_usage
+    clear_all_logs, get_daily_new_users, get_platform_usage
 )
 
 # التحقق من المشرف
@@ -19,8 +19,8 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logs = get_all_logs()
     total_users = len(users)
     total_posts = sum(len(user_logs) for user_logs in logs.values()) if logs else 0
-    new_users = get_new_users_today(users)  # استخدام الدالة المعدلة هنا
-    platform_ranking = get_platform_usage(logs)
+    new_users = get_daily_new_users()
+    platform_ranking = get_platform_usage()  # تم التعديل هنا
 
     ranking_text = "\n".join(
         [f"{idx+1}. {platform}: {count}" for idx, (platform, count) in enumerate(platform_ranking)]
