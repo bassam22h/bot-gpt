@@ -35,14 +35,13 @@ async def check_subscription_callback(update: Update, context: ContextTypes.DEFA
 
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    user_data = get_user_data(user.id)
 
-    # تسجيل المستخدم إذا لم يكن موجودًا
-    if not user_data:
-        save_user_data(user.id, {
-            "count": 0,
-            "date": str(datetime.utcnow().date())
-        })
+    # تسجيل المستخدم مباشرة في قاعدة البيانات إن لم يكن موجود
+    data = get_user_data(user.id)
+    if not data.get("date"):
+        data["date"] = str(datetime.utcnow().date())
+        data["count"] = 0
+        save_user_data(user.id, data)
 
     if not await check_subscription(update, context):
         await send_subscription_prompt(update, context)
