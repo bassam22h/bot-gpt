@@ -71,8 +71,9 @@ def require_subscription(func):
 
 # تسجيل المنشورات
 def log_post(user_id: int, platform: str, content: str):
-    timestamp = datetime.utcnow().isoformat().replace(".", "-").replace(":", "-")
-    ref = db.reference(f"/logs/{user_id}/{timestamp}")
+    timestamp = datetime.utcnow().isoformat()
+    sanitized_timestamp = timestamp.replace(".", "-")  # تصحيح العلامات غير المسموح بها
+    ref = db.reference(f"/logs/{user_id}/{sanitized_timestamp}")
     ref.set({
         "platform": platform,
         "content": content
@@ -87,10 +88,17 @@ def get_all_logs():
     ref = db.reference("/logs")
     return ref.get() or {}
 
-def clear_all_users():
-    ref = db.reference("/users")
-    ref.delete()
+# تصفير العدادات فقط دون حذف المستخدمين
+def reset_user_counts():
+    users_ref = db.reference("/users")
+    users_data = users_ref.get() or {}
 
+    for user_id in users_data:
+        users_data[user_id]["count"] = 0
+
+    users_ref.set(users_data)
+
+# حذف كل السجلات (المنشورات)
 def clear_all_logs():
     ref = db.reference("/logs")
     ref.delete()
