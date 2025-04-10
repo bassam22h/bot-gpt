@@ -3,7 +3,7 @@ from telegram.ext import ContextTypes
 import os
 import logging
 from datetime import datetime
-from utils import get_all_users, get_all_logs, clear_all_users
+from utils import get_all_users, get_all_logs, clear_all_users, clear_all_logs
 
 ADMIN_ID = int(os.getenv("ADMIN_ID"))
 
@@ -15,7 +15,8 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("📊 الإحصائيات", callback_data="show_stats")],
         [InlineKeyboardButton("📢 إرسال رسالة جماعية", callback_data="send_broadcast")],
-        [InlineKeyboardButton("🧹 تصفير المستخدمين", callback_data="clear_users")]
+        [InlineKeyboardButton("🧹 تصفير المستخدمين", callback_data="confirm_clear_users")],
+        [InlineKeyboardButton("🗑️ تصفير المنشورات", callback_data="confirm_clear_logs")]
     ])
     await update.message.reply_text("🛠️ لوحة تحكم المشرف:", reply_markup=keyboard)
 
@@ -61,9 +62,30 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
         context.user_data["awaiting_broadcast"] = True
         await query.edit_message_text("✏️ أرسل الرسالة التي تريد بثها:")
 
+    elif query.data == "confirm_clear_users":
+        confirm_keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("✅ نعم، احذف المستخدمين", callback_data="clear_users")],
+            [InlineKeyboardButton("❌ إلغاء", callback_data="cancel_clear")]
+        ])
+        await query.edit_message_text("⚠️ هل أنت متأكد من حذف جميع بيانات المستخدمين؟", reply_markup=confirm_keyboard)
+
+    elif query.data == "confirm_clear_logs":
+        confirm_keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("✅ نعم، احذف المنشورات", callback_data="clear_logs")],
+            [InlineKeyboardButton("❌ إلغاء", callback_data="cancel_clear")]
+        ])
+        await query.edit_message_text("⚠️ هل أنت متأكد من حذف جميع سجلات المنشورات؟", reply_markup=confirm_keyboard)
+
     elif query.data == "clear_users":
         clear_all_users()
         await query.edit_message_text("✅ تم حذف جميع بيانات المستخدمين.")
+
+    elif query.data == "clear_logs":
+        clear_all_logs()
+        await query.edit_message_text("✅ تم حذف جميع سجلات المنشورات.")
+
+    elif query.data == "cancel_clear":
+        await query.edit_message_text("❌ تم إلغاء العملية.")
 
 async def receive_broadcast_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_chat.id != ADMIN_ID or not context.user_data.get("awaiting_broadcast"):
