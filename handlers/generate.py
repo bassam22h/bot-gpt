@@ -1,7 +1,7 @@
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
 from services.openai_service import generate_response
-from utils import get_user_limit_status, increment_user_count, require_subscription, load_users
+from services.firebase_service import get_user_count, increment_user_count, require_subscription, load_users
 
 # الحالات المطلوبة للمحادثة
 PLATFORM_CHOICE, EVENT_DETAILS = range(2)
