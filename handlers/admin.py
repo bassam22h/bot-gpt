@@ -1,80 +1,80 @@
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes
+from config import ADMIN_IDS
 from utils import (
-    get_all_users, get_all_logs, reset_user_counts, clear_all_logs,
-    get_daily_new_users, get_platform_usage
+    get_all_users, get_all_logs, reset_user_counts,
+    clear_all_logs, get_new_users_today, get_platform_usage_ranking
 )
 
-ADMIN_IDS = [123456789]  # ضع معرفك هنا كمشرف
-
-def is_admin(user_id):
+# التحقق من المشرف
+def is_admin(user_id: int) -> bool:
     return user_id in ADMIN_IDS
 
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if not is_admin(user_id):
-        await update.message.reply_text("❌ ليس لديك صلاحية الوصول إلى هذه اللوحة.")
+    if not is_admin(update.effective_user.id):
+        await update.message.reply_text("❌ ليس لديك صلاحية الوصول إلى لوحة التحكم.")
         return
 
+    users = get_all_users()
+    logs = get_all_logs()
+    total_users = len(users)
+    total_posts = sum(len(user_logs) for user_logs in logs.values()) if logs else 0
+    new_users = get_new_users_today(users)
+    platform_ranking = get_platform_usage_ranking(logs)
+
+    ranking_text = "\n".join(
+        [f"{idx+1}. {platform}: {count}" for idx, (platform, count) in enumerate(platform_ranking)]
+    ) or "لا توجد بيانات"
+
+    text = (
+        f"📊 إحصائيات البوت:\n"
+        f"- المستخدمون الكلي: {total_users}\n"
+        f"- منشورات اليوم: {total_posts}\n"
+        f"- مستخدمون جدد اليوم: {new_users}\n\n"
+        f"🏆 ترتيب المنصات:\n{ranking_text}"
+    )
+
     keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton("📊 عرض الإحصائيات", callback_data="stats")],
         [InlineKeyboardButton("♻️ تصفير العدادات", callback_data="reset_counts")],
-        [InlineKeyboardButton("🗑️ حذف جميع السجلات", callback_data="clear_logs")],
+        [InlineKeyboardButton("🗑️ حذف جميع المنشورات", callback_data="clear_logs")],
         [InlineKeyboardButton("📢 إرسال رسالة جماعية", callback_data="broadcast")]
     ])
 
-    await update.message.reply_text("🔧 لوحة تحكم المشرف:", reply_markup=keyboard)
+    await update.message.reply_text(text, reply_markup=keyboard)
 
-async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()
-
     user_id = query.from_user.id
+
     if not is_admin(user_id):
-        await query.edit_message_text("❌ ليس لديك صلاحية الوصول.")
+        await query.answer("❌ ليس لديك صلاحية.")
         return
 
-    if query.data == "stats":
-        users = get_all_users()
-        logs = get_all_logs()
-        platforms = get_platform_usage()
-        new_users = get_daily_new_users()
-
-        text = f"""📊 <b>إحصائيات البوت:</b>
-
-👥 عدد المستخدمين: <b>{len(users)}</b>
-📝 عدد المنشورات: <b>{sum(len(l) for l in logs.values())}</b>
-
-🏆 <b>أكثر المنصات استخدامًا:</b>
-""" + "\n".join([f"• {p}: {c}" for p, c in platforms.items()]) + """
-
-📈 <b>عدد المستخدمين الجدد يوميًا:</b>
-""" + "\n".join([f"• {d}: {c}" for d, c in new_users.items()])
-
-        await query.edit_message_text(text, parse_mode="HTML")
-
-    elif query.data == "reset_counts":
+    if query.data == "reset_counts":
         reset_user_counts()
-        await query.edit_message_text("✅ تم تصفير عدد الطلبات لكل المستخدمين.")
-
+        await query.edit_message_text("✅ تم تصفير العدادات لجميع المستخدمين.")
     elif query.data == "clear_logs":
         clear_all_logs()
-        await query.edit_message_text("✅ تم حذف جميع السجلات.")
-
+        await query.edit_message_text("✅ تم حذف جميع المنشورات.")
     elif query.data == "broadcast":
         context.user_data["broadcast_mode"] = True
-        await query.edit_message_text("✍️ أرسل الآن الرسالة التي تريد إرسالها لجميع المستخدمين:")
+        await query.message.reply_text("✉️ أرسل الرسالة التي تريد إرسالها لجميع المستخدمين.")
+        await query.answer()
 
-async def handle_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if context.user_data.get("broadcast_mode"):
-        message = update.message.text
-        users = get_all_users()
-        count = 0
-        for user_id in users.keys():
-            try:
-                await context.bot.send_message(chat_id=user_id, text=message)
-                count += 1
-            except:
-                pass
-        context.user_data["broadcast_mode"] = False
-        await update.message.reply_text(f"✅ تم إرسال الرسالة إلى {count} مستخدم.")
+async def receive_broadcast_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.user_data.get("broadcast_mode"):
+        return
+
+    message = update.message.text
+    users = get_all_users()
+
+    sent = 0
+    for user_id in users:
+        try:
+            await context.bot.send_message(chat_id=user_id, text=message)
+            sent += 1
+        except:
+            continue
+
+    await update.message.reply_text(f"✅ تم إرسال الرسالة إلى {sent} مستخدم.")
+    context.user_data["broadcast_mode"] = False
