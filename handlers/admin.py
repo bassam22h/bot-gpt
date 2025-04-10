@@ -92,3 +92,24 @@ async def confirm_clear_logs(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 async def cancel_clear_logs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.callback_query.edit_message_text("❌ تم إلغاء عملية حذف المنشورات.")
+
+# دالة إرسال رسالة جماعية لجميع المستخدمين
+async def receive_broadcast_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if "broadcast_mode" not in context.user_data or not context.user_data["broadcast_mode"]:
+        await update.message.reply_text("❌ لم يتم تفعيل وضع الرسائل الجماعية.")
+        return
+
+    # جلب الرسالة التي أرسلها المشرف
+    broadcast_message = update.message.text
+
+    # إرسال الرسالة لجميع المستخدمين
+    users = get_all_users()
+    for user_id in users.keys():
+        try:
+            await context.bot.send_message(user_id, broadcast_message)
+        except Exception as e:
+            print(f"Failed to send message to {user_id}: {e}")
+
+    # إغلاق وضع الرسائل الجماعية
+    context.user_data["broadcast_mode"] = False
+    await update.message.reply_text("✅ تم إرسال الرسالة لجميع المستخدمين.")
