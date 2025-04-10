@@ -2,142 +2,113 @@ import os
 import json
 import firebase_admin
 from firebase_admin import credentials, db
-from functools import wraps
-from telegram import Update
-from telegram.ext import ContextTypes
 from datetime import datetime, date
-from collections import Counter, defaultdict
+from collections import Counter
+import logging
 
-FIREBASE_CREDENTIALS_JSON = os.getenv("FIREBASE_CREDENTIALS_JSON")
-FIREBASE_DB_URL = "https://ai-postmakerbot-default-rtdb.asia-southeast1.firebasedatabase.app"
-REQUIRED_CHANNEL = os.getenv("REQUIRED_CHANNEL")
+# إعداد المسجل (logger)
+logger = logging.getLogger(__name__)
 
 # تهيئة Firebase
-if not firebase_admin._apps:
-    cred = credentials.Certificate(json.loads(FIREBASE_CREDENTIALS_JSON))
-    firebase_admin.initialize_app(cred, {
-        'databaseURL': FIREBASE_DB_URL
-    })
+def initialize_firebase():
+    if not firebase_admin._apps:
+        try:
+            cred = credentials.Certificate(json.loads(os.getenv("FIREBASE_CREDENTIALS_JSON")))
+            firebase_admin.initialize_app(cred, {
+                'databaseURL': os.getenv("FIREBASE_DB_URL")
+            })
+        except Exception as e:
+            logger.error(f"Firebase initialization failed: {e}")
+            raise
 
-# بيانات المستخدمين
+initialize_firebase()
+
+# وظائف إدارة المستخدمين
 def get_user_data(user_id: int):
-    ref = db.reference(f"/users/{user_id}")
-    data = ref.get()
-    if data is None:
+    try:
+        return db.reference(f"/users/{user_id}").get() or {"count": 0, "date": str(date.today())}
+    except Exception as e:
+        logger.error(f"Error getting user data: {e}")
         return {"count": 0}
-    return data
 
 def save_user_data(user_id: int, data: dict):
-    ref = db.reference(f"/users/{user_id}")
-    ref.set(data)
-
-def get_user_limit_status(user_id: int, limit: int = 5) -> bool:
-    data = get_user_data(user_id)
-    return data.get("count", 0) < limit
+    try:
+        db.reference(f"/users/{user_id}").set(data)
+    except Exception as e:
+        logger.error(f"Error saving user data: {e}")
 
 def increment_user_count(user_id: int):
-    data = get_user_data(user_id)
-    data["count"] = data.get("count", 0) + 1
-    save_user_data(user_id, data)
-
-# الاشتراك بالقناة
-async def is_user_subscribed(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    if not REQUIRED_CHANNEL:
-        return True
     try:
-        member = await context.bot.get_chat_member(REQUIRED_CHANNEL, user_id)
-        return member.status in ["member", "creator", "administrator"]
-    except Exception:
-        return False
+        user_ref = db.reference(f"/users/{user_id}")
+        user_ref.update({"count": firebase_admin.db.Increment(1)})
+    except Exception as e:
+        logger.error(f"Error incrementing count: {e}")
 
-def require_subscription(func):
-    @wraps(func)
-    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
-        user_id = update.effective_user.id
-        try:
-            subscribed = await is_user_subscribed(user_id, context)
-        except Exception:
-            await update.message.reply_text("⚠️ حدث خطأ أثناء التحقق من الاشتراك.")
-            return
-
-        if not subscribed:
-            await update.message.reply_text(
-                f"❌ يجب عليك الاشتراك أولاً في القناة:\n\nhttps://t.me/{REQUIRED_CHANNEL.replace('@', '')}"
-            )
-            return
-
-        return await func(update, context, *args, **kwargs)
-    return wrapper
-
-# تسجيل المنشورات
+# وظائف السجلات
 def log_post(user_id: int, platform: str, content: str):
-    timestamp = datetime.utcnow().isoformat()
-    sanitized_timestamp = timestamp.replace(".", "-")  # تصحيح العلامات غير المسموح بها
-    ref = db.reference(f"/logs/{user_id}/{sanitized_timestamp}")
-    ref.set({
-        "platform": platform,
-        "content": content
-    })
-
-# الإحصائيات
-def get_all_users():
-    ref = db.reference("/users")
-    return ref.get() or {}
+    try:
+        post_ref = db.reference(f"/logs/{user_id}").push()
+        post_ref.set({
+            "platform": platform,
+            "content": content,
+            "timestamp": datetime.utcnow().isoformat()
+        })
+    except Exception as e:
+        logger.error(f"Error logging post: {e}")
 
 def get_all_logs():
-    ref = db.reference("/logs")
-    return ref.get() or {}
+    try:
+        return db.reference("/logs").get() or {}
+    except Exception as e:
+        logger.error(f"Error getting logs: {e}")
+        return {}
 
-# المستخدمين الجدد يوميًا
-def get_daily_new_users():
-    users = get_all_users()
-    daily_counts = defaultdict(int)
-    for data in users.values():
-        join_date = data.get("date")
-        if join_date:
-            daily_counts[join_date] += 1
-    return dict(sorted(daily_counts.items(), reverse=True))
+# وظائف الإحصائيات
+def get_platform_usage(limit=5):
+    try:
+        logs = get_all_logs()
+        platforms = []
+        
+        for user_logs in logs.values():
+            if not isinstance(user_logs, dict):
+                continue
+                
+            for post in user_logs.values():
+                if isinstance(post, dict) and post.get("platform"):
+                    platforms.append(post["platform"])
 
-# ترتيب المنصات حسب الاستخدام
-def get_platform_usage():
-    logs = get_all_logs()
-    platforms = []
-    for user_id, user_logs in logs.items():  # التكرار عبر جميع سجلات المستخدمين
-        if isinstance(user_logs, dict):
-            for timestamp, entry in user_logs.items():  # التكرار عبر جميع الإدخالات
-                if isinstance(entry, dict) and "platform" in entry:
-                    platforms.append(entry["platform"])  # إضافة المنصة
-        else:
-            print(f"Unexpected format for user {user_id}: {user_logs}")
-    
-    if platforms:  # تأكد من أن المنصات تحتوي على بيانات
-        counter = Counter(platforms)  # حساب تكرار المنصات
-        return dict(counter.most_common())  # إرجاع المنصات مرتبة
-    else:
-        return []  # إرجاع قائمة فارغة إذا لم توجد منصات
+        if not platforms:
+            return []
 
-# تصفير العدادات فقط دون حذف المستخدمين
+        return Counter(platforms).most_common(limit)
+    except Exception as e:
+        logger.error(f"Error getting platform stats: {e}")
+        return []
+
 def reset_user_counts():
-    users_ref = db.reference("/users")
-    users_data = users_ref.get() or {}
+    try:
+        users_ref = db.reference("/users")
+        users = users_ref.get() or {}
+        
+        updates = {f"{uid}/count": 0 for uid in users}
+        users_ref.update(updates)
+    except Exception as e:
+        logger.error(f"Error resetting counts: {e}")
+        raise
 
-    for user_id in users_data:
-        users_data[user_id]["count"] = 0
-
-    users_ref.set(users_data)
-
-# حذف كل السجلات (المنشورات)
 def clear_all_logs():
-    ref = db.reference("/logs")
-    ref.delete()
+    try:
+        db.reference("/logs").delete()
+    except Exception as e:
+        logger.error(f"Error clearing logs: {e}")
+        raise
 
-# إضافة دالة get_new_users_today لحساب عدد المستخدمين الجدد اليوم
-def get_new_users_today(users):
-    today = str(datetime.utcnow().date())  # الحصول على تاريخ اليوم
-    new_users_count = 0
-
-    for user_data in users.values():
-        if user_data.get("date") == today:  # التحقق إذا كان تاريخ انضمام المستخدم هو اليوم
-            new_users_count += 1
-
-    return new_users_count
+# وظائف أخرى
+def get_daily_new_users():
+    try:
+        users = db.reference("/users").get() or {}
+        today = str(date.today())
+        return sum(1 for u in users.values() if u.get('date') == today)
+    except Exception as e:
+        logger.error(f"Error getting new users: {e}")
+        return 0
