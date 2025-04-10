@@ -71,7 +71,8 @@ def require_subscription(func):
 
 # تسجيل المنشورات
 def log_post(user_id: int, platform: str, content: str):
-    timestamp = datetime.utcnow().isoformat()
+    # استخدام طابع زمني آمن لمسار Firebase
+    timestamp = datetime.utcnow().strftime("%Y-%m-%d_%H-%M-%S")
     ref = db.reference(f"/logs/{user_id}/{timestamp}")
     ref.set({
         "platform": platform,
