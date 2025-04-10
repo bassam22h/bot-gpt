@@ -1,111 +1,80 @@
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes
-import os
-import logging
-from datetime import datetime
 from utils import (
-    get_all_users, get_all_logs, reset_user_counts,
-    clear_all_logs
+    get_all_users, get_all_logs, reset_user_counts, clear_all_logs,
+    get_daily_new_users, get_platform_usage
 )
 
-ADMIN_ID = int(os.getenv("ADMIN_ID"))
+ADMIN_IDS = [123456789]  # ضع معرفك هنا كمشرف
+
+def is_admin(user_id):
+    return user_id in ADMIN_IDS
 
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_chat.id != ADMIN_ID:
-        await update.message.reply_text("❌ ليس لديك صلاحية.")
+    user_id = update.effective_user.id
+    if not is_admin(user_id):
+        await update.message.reply_text("❌ ليس لديك صلاحية الوصول إلى هذه اللوحة.")
         return
 
     keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton("📊 الإحصائيات", callback_data="show_stats")],
-        [InlineKeyboardButton("📢 إرسال رسالة جماعية", callback_data="send_broadcast")],
-        [InlineKeyboardButton("🧹 تصفير عدد المستخدمين", callback_data="confirm_reset_users")],
-        [InlineKeyboardButton("🗑️ حذف جميع المنشورات", callback_data="confirm_clear_logs")]
+        [InlineKeyboardButton("📊 عرض الإحصائيات", callback_data="stats")],
+        [InlineKeyboardButton("♻️ تصفير العدادات", callback_data="reset_counts")],
+        [InlineKeyboardButton("🗑️ حذف جميع السجلات", callback_data="clear_logs")],
+        [InlineKeyboardButton("📢 إرسال رسالة جماعية", callback_data="broadcast")]
     ])
-    await update.message.reply_text("🛠️ لوحة تحكم المشرف:", reply_markup=keyboard)
 
-async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("🔧 لوحة تحكم المشرف:", reply_markup=keyboard)
+
+async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    data = query.data
-
-    if data == "show_stats":
-        users = get_all_users()
-        logs = get_all_logs()
-
-        num_users = len(users)
-        all_posts = []
-        posts_today = 0
-        platform_counter = {}
-
-        today = datetime.utcnow().date()
-
-        for user_id, user_logs in logs.items():
-            for ts, log in user_logs.items():
-                all_posts.append(log)
-                if "platform" in log:
-                    platform = log["platform"]
-                    platform_counter[platform] = platform_counter.get(platform, 0) + 1
-                try:
-                    log_time = datetime.fromisoformat(ts).date()
-                    if log_time == today:
-                        posts_today += 1
-                except:
-                    continue
-
-        most_common_platform = max(platform_counter.items(), key=lambda x: x[1])[0] if platform_counter else "غير محدد"
-
-        text = (
-            f"👥 المستخدمون: {num_users}\n"
-            f"📝 إجمالي المنشورات: {len(all_posts)}\n"
-            f"📅 منشورات اليوم: {posts_today}\n"
-            f"🔥 أكثر منصة استخدامًا: {most_common_platform}"
-        )
-        await query.edit_message_text(text)
-
-    elif data == "send_broadcast":
-        context.user_data["awaiting_broadcast"] = True
-        await query.edit_message_text("✏️ أرسل الرسالة التي تريد بثها:")
-
-    elif data == "confirm_reset_users":
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("✅ تأكيد التصفير", callback_data="reset_users")],
-            [InlineKeyboardButton("❌ إلغاء", callback_data="cancel_admin")]
-        ])
-        await query.edit_message_text("⚠️ هل أنت متأكد أنك تريد تصفير العدادات لجميع المستخدمين؟", reply_markup=keyboard)
-
-    elif data == "confirm_clear_logs":
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("✅ تأكيد الحذف", callback_data="clear_logs")],
-            [InlineKeyboardButton("❌ إلغاء", callback_data="cancel_admin")]
-        ])
-        await query.edit_message_text("⚠️ هل تريد حذف *جميع* المنشورات؟", reply_markup=keyboard)
-
-    elif data == "reset_users":
-        reset_user_counts()
-        await query.edit_message_text("✅ تم تصفير العدادات لجميع المستخدمين.")
-
-    elif data == "clear_logs":
-        clear_all_logs()
-        await query.edit_message_text("✅ تم حذف جميع سجلات المنشورات.")
-
-    elif data == "cancel_admin":
-        await query.edit_message_text("❌ تم إلغاء العملية.")
-
-async def receive_broadcast_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_chat.id != ADMIN_ID or not context.user_data.get("awaiting_broadcast"):
+    user_id = query.from_user.id
+    if not is_admin(user_id):
+        await query.edit_message_text("❌ ليس لديك صلاحية الوصول.")
         return
 
-    message = update.message.text
-    context.user_data["awaiting_broadcast"] = False
+    if query.data == "stats":
+        users = get_all_users()
+        logs = get_all_logs()
+        platforms = get_platform_usage()
+        new_users = get_daily_new_users()
 
-    users = get_all_users()
-    count = 0
-    for user_id in users:
-        try:
-            await context.bot.send_message(chat_id=int(user_id), text=message)
-            count += 1
-        except Exception as e:
-            logging.error(f"فشل الإرسال إلى {user_id}: {e}")
+        text = f"""📊 <b>إحصائيات البوت:</b>
 
-    await update.message.reply_text(f"✅ تم إرسال الرسالة إلى {count} مستخدم.")
+👥 عدد المستخدمين: <b>{len(users)}</b>
+📝 عدد المنشورات: <b>{sum(len(l) for l in logs.values())}</b>
+
+🏆 <b>أكثر المنصات استخدامًا:</b>
+""" + "\n".join([f"• {p}: {c}" for p, c in platforms.items()]) + """
+
+📈 <b>عدد المستخدمين الجدد يوميًا:</b>
+""" + "\n".join([f"• {d}: {c}" for d, c in new_users.items()])
+
+        await query.edit_message_text(text, parse_mode="HTML")
+
+    elif query.data == "reset_counts":
+        reset_user_counts()
+        await query.edit_message_text("✅ تم تصفير عدد الطلبات لكل المستخدمين.")
+
+    elif query.data == "clear_logs":
+        clear_all_logs()
+        await query.edit_message_text("✅ تم حذف جميع السجلات.")
+
+    elif query.data == "broadcast":
+        context.user_data["broadcast_mode"] = True
+        await query.edit_message_text("✍️ أرسل الآن الرسالة التي تريد إرسالها لجميع المستخدمين:")
+
+async def handle_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if context.user_data.get("broadcast_mode"):
+        message = update.message.text
+        users = get_all_users()
+        count = 0
+        for user_id in users.keys():
+            try:
+                await context.bot.send_message(chat_id=user_id, text=message)
+                count += 1
+            except:
+                pass
+        context.user_data["broadcast_mode"] = False
+        await update.message.reply_text(f"✅ تم إرسال الرسالة إلى {count} مستخدم.")
