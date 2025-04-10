@@ -1,10 +1,9 @@
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes
-import json
+from firebase_admin import db
 import os
 import logging
 
-USERS_FILE = "data/users.json"
 ADMIN_ID = int(os.getenv("ADMIN_ID"))
 
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -24,11 +23,13 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
 
     if query.data == "show_stats":
         try:
-            with open(USERS_FILE, "r") as f:
-                users = json.load(f)
+            ref = db.reference("/users")
+            users = ref.get() or {}
             num_users = len(users)
-        except:
+        except Exception as e:
+            logging.error(f"خطأ في جلب الإحصائيات: {e}")
             num_users = 0
+
         await query.edit_message_text(f"👥 عدد المستخدمين: {num_users}")
 
     elif query.data == "send_broadcast":
@@ -43,9 +44,10 @@ async def receive_broadcast_message(update: Update, context: ContextTypes.DEFAUL
     context.user_data["awaiting_broadcast"] = False
 
     try:
-        with open(USERS_FILE, "r") as f:
-            users = json.load(f)
-    except:
+        ref = db.reference("/users")
+        users = ref.get() or {}
+    except Exception as e:
+        logging.error(f"خطأ في تحميل المستخدمين من Firebase: {e}")
         users = {}
 
     count = 0
