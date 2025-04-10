@@ -64,3 +64,8 @@ def require_subscription(func):
 
         return await func(update, context, *args, **kwargs)
     return wrapper
+
+# دالة جديدة: الحصول على عدد الطلبات المستخدمة
+def get_user_count(user_id: int) -> int:
+    data = get_user_data(user_id)
+    return data.get("count", 0)
