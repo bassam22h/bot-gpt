@@ -3,7 +3,7 @@ from telegram.ext import ContextTypes, ConversationHandler
 from services.openai_service import generate_response
 from utils import (
     get_user_limit_status, increment_user_count,
-    require_subscription, get_user_count
+    require_subscription, get_user_data, log_post
 )
 
 PLATFORM_CHOICE, EVENT_DETAILS = range(2)
@@ -14,7 +14,7 @@ DAILY_LIMIT = 5
 @require_subscription
 async def generate_post_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    count = get_user_count(user_id)
+    count = get_user_data(user_id).get("count", 0)
 
     if count >= DAILY_LIMIT:
         await update.message.reply_text("⚠️ لقد وصلت للحد الأقصى من الطلبات اليوم.")
@@ -34,7 +34,7 @@ async def platform_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     platform = update.message.text
 
     if platform not in SUPPORTED_PLATFORMS:
-        await update.message.reply_text("⚠️ المنصة غير مدعومة. الخيارات المتاحة: تويتر، لينكدإن، إنستغرام")
+        await update.message.reply_text("⚠️ المنصة غير مدعومة.")
         return PLATFORM_CHOICE
 
     context.user_data["platform"] = platform
@@ -47,19 +47,21 @@ async def event_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
     platform = context.user_data.get("platform")
     user_input = update.message.text
 
-    msg = await update.message.reply_text("⏳ يتم إنشاء المنشور، الرجاء الانتظار...")
+    msg = await update.message.reply_text("⏳ يتم إنشاء المنشور...")
 
     try:
         result = generate_response(user_input, platform)
         increment_user_count(user_id)
-        remaining = max(0, DAILY_LIMIT - get_user_count(user_id))
+        log_post(user_id, platform, result)
+
+        remaining = max(0, DAILY_LIMIT - get_user_data(user_id).get("count", 0))
 
         await context.bot.delete_message(chat_id=msg.chat.id, message_id=msg.message_id)
         await update.message.reply_text(result)
-        await update.message.reply_text(f"✅ تم استخدام طلبك. تبقى لديك {remaining} من {DAILY_LIMIT} لهذا اليوم.")
+        await update.message.reply_text(f"✅ تبقى لديك {remaining} من {DAILY_LIMIT} لهذا اليوم.")
     except Exception as e:
         await context.bot.delete_message(chat_id=msg.chat.id, message_id=msg.message_id)
-        await update.message.reply_text("⚠️ حدث خطأ أثناء إنشاء المنشور. الرجاء المحاولة لاحقًا.")
+        await update.message.reply_text("⚠️ حدث خطأ أثناء إنشاء المنشور.")
         raise e
 
     return ConversationHandler.END
