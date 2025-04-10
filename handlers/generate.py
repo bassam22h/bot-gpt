@@ -1,3 +1,4 @@
+import os
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
 from services.openai_service import generate_response
@@ -11,22 +12,31 @@ PLATFORM_CHOICE, EVENT_DETAILS = range(2)
 SUPPORTED_PLATFORMS = ["تويتر", "لينكدإن", "إنستغرام"]
 DAILY_LIMIT = 5
 
+# قراءة معرفات المشرفين من متغير بيئة
+ADMIN_IDS = [int(i) for i in os.getenv("ADMIN_IDS", "").split(",") if i.strip().isdigit()]
+
 @require_subscription
 async def generate_post_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    count = get_user_data(user_id).get("count", 0)
+    is_admin = user_id in ADMIN_IDS
 
-    if count >= DAILY_LIMIT:
-        await update.message.reply_text("⚠️ لقد وصلت للحد الأقصى من الطلبات اليوم.")
-        return ConversationHandler.END
+    if not is_admin:
+        count = get_user_data(user_id).get("count", 0)
+        if count >= DAILY_LIMIT:
+            await update.message.reply_text("⚠️ لقد وصلت للحد الأقصى من الطلبات اليوم.")
+            return ConversationHandler.END
 
-    remaining = DAILY_LIMIT - count
-    keyboard = [SUPPORTED_PLATFORMS]
+        remaining = DAILY_LIMIT - count
+        await update.message.reply_text(
+            f"📱 اختر المنصة:\n\nلديك {remaining} من {DAILY_LIMIT} طلبات متبقية اليوم.",
+            reply_markup=ReplyKeyboardMarkup([SUPPORTED_PLATFORMS], one_time_keyboard=True, resize_keyboard=True)
+        )
+    else:
+        await update.message.reply_text(
+            "📱 اختر المنصة (لا يوجد حد للمشرفين):",
+            reply_markup=ReplyKeyboardMarkup([SUPPORTED_PLATFORMS], one_time_keyboard=True, resize_keyboard=True)
+        )
 
-    await update.message.reply_text(
-        f"📱 اختر المنصة:\n\nلديك {remaining} من {DAILY_LIMIT} طلبات متبقية اليوم.",
-        reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
-    )
     return PLATFORM_CHOICE
 
 @require_subscription
@@ -44,22 +54,22 @@ async def platform_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
 @require_subscription
 async def event_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
+    is_admin = user_id in ADMIN_IDS
     platform = context.user_data.get("platform")
     user_input = update.message.text
 
     msg = await update.message.reply_text("⏳ يتم إنشاء المنشور...")
 
     try:
-        # إنشاء المنشور بالذكاء الاصطناعي
         result = generate_response(user_input, platform)
 
-        # زيادة عدد الاستخدام
-        increment_user_count(user_id)
+        if not is_admin:
+            increment_user_count(user_id)
+            remaining = max(0, DAILY_LIMIT - get_user_data(user_id).get("count", 0))
+        else:
+            remaining = "غير محدود"
 
-        # تسجيل المحتوى في السجلات
         log_post(user_id, platform, result)
-
-        remaining = max(0, DAILY_LIMIT - get_user_data(user_id).get("count", 0))
 
         await context.bot.delete_message(chat_id=msg.chat.id, message_id=msg.message_id)
         await update.message.reply_text(result)
