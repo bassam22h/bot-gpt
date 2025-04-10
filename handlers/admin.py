@@ -1,115 +1,167 @@
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
-from telegram.ext import ContextTypes
+from telegram.ext import ContextTypes, CallbackContext
 from config import ADMIN_IDS
 from utils import (
     get_all_users, get_all_logs, reset_user_counts,
     clear_all_logs, get_daily_new_users, get_platform_usage
 )
+import logging
 
-# التحقق من المشرف
+# إعداد المسجل (logger)
+logger = logging.getLogger(__name__)
+
 def is_admin(user_id: int) -> bool:
     return user_id in ADMIN_IDS
 
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_admin(update.effective_user.id):
-        await update.message.reply_text("❌ ليس لديك صلاحية الوصول إلى لوحة التحكم.")
+    user = update.effective_user
+    if not is_admin(user.id):
+        await update.message.reply_text(
+            "⛔️ <b>الوصول مرفوض!</b>\n"
+            "ليس لديك صلاحيات المشرف.",
+            parse_mode='HTML'
+        )
         return
 
-    # إنشاء زر الإحصائيات فقط لعرض الإحصائيات عند الضغط عليه
     keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton("📊 عرض الإحصائيات", callback_data="view_statistics")],
-        [InlineKeyboardButton("♻️ تصفير العدادات", callback_data="reset_counts")],
-        [InlineKeyboardButton("🗑️ حذف جميع المنشورات", callback_data="clear_logs")],
-        [InlineKeyboardButton("📢 إرسال رسالة جماعية", callback_data="broadcast")]
+        [InlineKeyboardButton("📊 الإحصائيات الكاملة", callback_data="view_statistics")],
+        [InlineKeyboardButton("🔄 تصفير العدادات", callback_data="reset_counts_confirm")],
+        [InlineKeyboardButton("🗑️ حذف جميع السجلات", callback_data="clear_logs_confirm")],
+        [InlineKeyboardButton("📢 إرسال إشعار عام", callback_data="broadcast_message")]
     ])
 
-    await update.message.reply_text("مرحبًا بك في لوحة تحكم المشرف! اختر الإجراء الذي تود القيام به:", reply_markup=keyboard)
+    await update.message.reply_text(
+        f"👮‍♂️ <b>مرحبًا بك {user.first_name} في لوحة التحكم</b>\n"
+        "اختر الإجراء المطلوب:",
+        reply_markup=keyboard,
+        parse_mode='HTML'
+    )
 
-async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_admin_actions(update: Update, context: CallbackContext):
     query = update.callback_query
-    user_id = query.from_user.id
+    await query.answer()
 
-    if not is_admin(user_id):
-        await query.answer("❌ ليس لديك صلاحية.")
+    if not is_admin(query.from_user.id):
+        await query.edit_message_text("⛔️ الوصول مرفوض!")
         return
 
-    if query.data == "view_statistics":
-        # عرض الإحصائيات بعد الضغط على الزر
+    action = query.data
+
+    if action == "view_statistics":
+        await show_statistics(query)
+    elif action.startswith("reset_counts"):
+        await handle_reset_counts(query, action)
+    elif action.startswith("clear_logs"):
+        await handle_clear_logs(query, action)
+    elif action == "broadcast_message":
+        await start_broadcast(query, context)
+
+async def show_statistics(query):
+    try:
         users = get_all_users()
         logs = get_all_logs()
+        
         total_users = len(users)
         total_posts = sum(len(user_logs) for user_logs in logs.values()) if logs else 0
-        new_users = get_daily_new_users()
-        platform_ranking = get_platform_usage()
+        new_users = len([u for u in users.values() if u.get('date') == str(date.today())])
+        platform_stats = get_platform_usage()
 
-        # التأكد من أن البيانات تُعاد بتنسيق مناسب (قائمة تحتوي على tuples)
-        if isinstance(platform_ranking, list):
-            ranking_text = "\n".join(
-                [f"{idx+1}. {platform}: {count}" for idx, (platform, count) in enumerate(platform_ranking)]
-            ) or "لا توجد بيانات"
+        stats_text = [
+            "📈 <b>الإحصائيات العامة:</b>",
+            f"👥 <b>إجمالي المستخدمين:</b> {total_users}",
+            f"📝 <b>إجمالي المنشورات:</b> {total_posts}",
+            f"🆕 <b>مستخدمين جدد اليوم:</b> {new_users}",
+            "",
+            "🏆 <b>أكثر المنصات استخدامًا:</b>"
+        ]
+
+        if platform_stats:
+            stats_text.extend(
+                f"{i+1}. {platform}: {count}" 
+                for i, (platform, count) in enumerate(platform_stats[:5])
         else:
-            ranking_text = "لا توجد بيانات"
+            stats_text.append("لا توجد بيانات متاحة")
 
-        text = (
-            f"📊 إحصائيات البوت:\n"
-            f"- المستخدمون الكلي: {total_users}\n"
-            f"- منشورات اليوم: {total_posts}\n"
-            f"- مستخدمون جدد اليوم: {new_users}\n\n"
-            f"🏆 ترتيب المنصات:\n{ranking_text}"
+        await query.edit_message_text(
+            "\n".join(stats_text),
+            parse_mode='HTML'
         )
+    except Exception as e:
+        logger.error(f"Error showing statistics: {e}")
+        await query.edit_message_text("⚠️ حدث خطأ أثناء جلب الإحصائيات")
 
-        # عرض الإحصائيات للمشرف
-        await query.edit_message_text(text)
-
-    elif query.data == "reset_counts":
+async def handle_reset_counts(query, action):
+    if action == "reset_counts_confirm":
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("✅ نعم, تصفير العدادات", callback_data="confirm_reset_counts")],
-            [InlineKeyboardButton("❌ لا, إلغاء", callback_data="cancel_reset_counts")]
+            [InlineKeyboardButton("✅ نعم، تأكيد", callback_data="reset_counts_execute")],
+            [InlineKeyboardButton("❌ إلغاء", callback_data="reset_counts_cancel")]
         ])
-        await query.edit_message_text("⚠️ هل أنت متأكد من أنك تريد تصفير العدادات لجميع المستخدمين؟", reply_markup=keyboard)
-    elif query.data == "clear_logs":
+        await query.edit_message_text(
+            "⚠️ <b>تأكيد العملية</b>\n"
+            "هل أنت متأكد من تصفير جميع عدادات المستخدمين؟",
+            reply_markup=keyboard,
+            parse_mode='HTML'
+        )
+    elif action == "reset_counts_execute":
+        reset_user_counts()
+        await query.edit_message_text("✅ تم تصفير العدادات بنجاح")
+    elif action == "reset_counts_cancel":
+        await query.edit_message_text("❌ تم إلغاء العملية")
+
+async def handle_clear_logs(query, action):
+    if action == "clear_logs_confirm":
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("✅ نعم, حذف جميع المنشورات", callback_data="confirm_clear_logs")],
-            [InlineKeyboardButton("❌ لا, إلغاء", callback_data="cancel_clear_logs")]
+            [InlineKeyboardButton("✅ نعم، تأكيد", callback_data="clear_logs_execute")],
+            [InlineKeyboardButton("❌ إلغاء", callback_data="clear_logs_cancel")]
         ])
-        await query.edit_message_text("⚠️ هل أنت متأكد من أنك تريد حذف جميع المنشورات؟", reply_markup=keyboard)
-    elif query.data == "broadcast":
-        context.user_data["broadcast_mode"] = True
-        await query.message.reply_text("✉️ أرسل الرسالة التي تريد إرسالها لجميع المستخدمين.")
-        await query.answer()
+        await query.edit_message_text(
+            "⚠️ <b>تأكيد العملية</b>\n"
+            "هل أنت متأكد من حذف جميع سجلات المنشورات؟",
+            reply_markup=keyboard,
+            parse_mode='HTML'
+        )
+    elif action == "clear_logs_execute":
+        clear_all_logs()
+        await query.edit_message_text("✅ تم حذف السجلات بنجاح")
+    elif action == "clear_logs_cancel":
+        await query.edit_message_text("❌ تم إلغاء العملية")
 
-# تأكيد التصرفات
-async def confirm_reset_counts(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    reset_user_counts()
-    await update.callback_query.edit_message_text("✅ تم تصفير العدادات لجميع المستخدمين.")
+async def start_broadcast(query, context):
+    context.user_data['awaiting_broadcast'] = True
+    await query.edit_message_text(
+        "📢 <b>وضع الإرسال العام</b>\n"
+        "أرسل الآن الرسالة التي تريد إرسالها لجميع المستخدمين:",
+        parse_mode='HTML'
+    )
 
-async def cancel_reset_counts(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.callback_query.edit_message_text("❌ تم إلغاء عملية تصفير العدادات.")
-
-async def confirm_clear_logs(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    clear_all_logs()
-    await update.callback_query.edit_message_text("✅ تم حذف جميع المنشورات.")
-
-async def cancel_clear_logs(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.callback_query.edit_message_text("❌ تم إلغاء عملية حذف المنشورات.")
-
-# دالة إرسال رسالة جماعية لجميع المستخدمين
-async def receive_broadcast_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if "broadcast_mode" not in context.user_data or not context.user_data["broadcast_mode"]:
-        await update.message.reply_text("❌ لم يتم تفعيل وضع الرسائل الجماعية.")
+async def receive_broadcast_message(update: Update, context: CallbackContext):
+    if not context.user_data.get('awaiting_broadcast'):
         return
 
-    # جلب الرسالة التي أرسلها المشرف
-    broadcast_message = update.message.text
+    user_id = update.effective_user.id
+    if not is_admin(user_id):
+        await update.message.reply_text("⛔️ الوصول مرفوض!")
+        return
 
-    # إرسال الرسالة لجميع المستخدمين
-    users = get_all_users()
-    for user_id in users.keys():
+    message = update.message.text
+    users = get_all_users().keys()
+
+    success = 0
+    failed = 0
+    progress_msg = await update.message.reply_text("⏳ جاري الإرسال...")
+
+    for uid in users:
         try:
-            await context.bot.send_message(user_id, broadcast_message)
+            await context.bot.send_message(uid, message)
+            success += 1
         except Exception as e:
-            print(f"Failed to send message to {user_id}: {e}")
+            logger.error(f"Failed to send to {uid}: {e}")
+            failed += 1
 
-    # إغلاق وضع الرسائل الجماعية
-    context.user_data["broadcast_mode"] = False
-    await update.message.reply_text("✅ تم إرسال الرسالة لجميع المستخدمين.")
+    context.user_data.pop('awaiting_broadcast', None)
+    await progress_msg.edit_text(
+        f"✅ <b>تم إرسال الإشعار</b>\n"
+        f"• تم بنجاح: {success}\n"
+        f"• فشل الإرسال: {failed}",
+        parse_mode='HTML'
+    )
