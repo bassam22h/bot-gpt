@@ -2,7 +2,7 @@ from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes
 from config import CHANNEL_USERNAME, CHANNEL_LINK
 from .generate import generate_post_handler
-from utils import load_users, save_users
+from utils import get_user_data, save_user_data
 
 # تنظيف اسم القناة في حال كان يحتوي على @
 clean_channel_username = CHANNEL_USERNAME.replace("@", "")
@@ -38,12 +38,13 @@ async def check_subscription_callback(update: Update, context: ContextTypes.DEFA
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
 
-    # حفظ المستخدم إذا لم يكن مسجلاً
-    users = load_users()
-    if str(user.id) not in users:
+    # حفظ المستخدم إذا لم يكن مسجلاً في Firebase
+    user_data = get_user_data(user.id)
+    if user_data["count"] is None:  # إذا كان المستخدم غير موجود
         from datetime import datetime
-        users[str(user.id)] = {"date": str(datetime.utcnow().date()), "count": 0}
-        save_users(users)
+        user_data["date"] = str(datetime.utcnow().date())
+        user_data["count"] = 0
+        save_user_data(user.id, user_data)
 
     if not await check_subscription(update, context):
         await send_subscription_prompt(update, context)
