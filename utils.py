@@ -110,8 +110,11 @@ def get_platform_usage():
         else:
             print(f"Unexpected format for user {user_id}: {user_logs}")
     
-    counter = Counter(platforms)  # حساب تكرار المنصات
-    return dict(counter.most_common())  # إرجاع المنصات مرتبة
+    if platforms:  # تأكد من أن المنصات تحتوي على بيانات
+        counter = Counter(platforms)  # حساب تكرار المنصات
+        return dict(counter.most_common())  # إرجاع المنصات مرتبة
+    else:
+        return []  # إرجاع قائمة فارغة إذا لم توجد منصات
 
 # تصفير العدادات فقط دون حذف المستخدمين
 def reset_user_counts():
