@@ -40,7 +40,7 @@ def main():
 
     # أوامر المشرف
     app.add_handler(CommandHandler("admin", admin_panel))
-    app.add_handler(CallbackQueryHandler(handle_admin_actions, pattern="^(show_stats|send_broadcast)$"))
+    app.add_handler(CallbackQueryHandler(handle_admin_actions, pattern="^(show_stats|send_broadcast|confirm_clear_users|clear_users|cancel_clear)$"))
     app.add_handler(MessageHandler(filters.TEXT & filters.Chat(ADMIN_ID), receive_broadcast_message))
 
     # معالج الأخطاء
