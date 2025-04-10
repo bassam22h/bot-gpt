@@ -102,11 +102,16 @@ def get_daily_new_users():
 def get_platform_usage():
     logs = get_all_logs()
     platforms = []
-    for user_logs in logs.values():
-        for entry in user_logs.values():
-            platforms.append(entry.get("platform"))
-    counter = Counter(platforms)
-    return dict(counter.most_common())
+    for user_id, user_logs in logs.items():  # التكرار عبر جميع سجلات المستخدمين
+        if isinstance(user_logs, dict):
+            for timestamp, entry in user_logs.items():  # التكرار عبر جميع الإدخالات
+                if isinstance(entry, dict) and "platform" in entry:
+                    platforms.append(entry["platform"])  # إضافة المنصة
+        else:
+            print(f"Unexpected format for user {user_id}: {user_logs}")
+    
+    counter = Counter(platforms)  # حساب تكرار المنصات
+    return dict(counter.most_common())  # إرجاع المنصات مرتبة
 
 # تصفير العدادات فقط دون حذف المستخدمين
 def reset_user_counts():
