@@ -34,7 +34,7 @@ async def platform_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     platform = update.message.text
 
     if platform not in SUPPORTED_PLATFORMS:
-        await update.message.reply_text("⚠️ المنصة غير مدعومة.")
+        await update.message.reply_text("⚠️ المنصة غير مدعومة. اختر من القائمة.")
         return PLATFORM_CHOICE
 
     context.user_data["platform"] = platform
@@ -50,8 +50,13 @@ async def event_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = await update.message.reply_text("⏳ يتم إنشاء المنشور...")
 
     try:
+        # إنشاء المنشور بالذكاء الاصطناعي
         result = generate_response(user_input, platform)
+
+        # زيادة عدد الاستخدام
         increment_user_count(user_id)
+
+        # تسجيل المحتوى في السجلات
         log_post(user_id, platform, result)
 
         remaining = max(0, DAILY_LIMIT - get_user_data(user_id).get("count", 0))
@@ -61,7 +66,7 @@ async def event_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"✅ تبقى لديك {remaining} من {DAILY_LIMIT} لهذا اليوم.")
     except Exception as e:
         await context.bot.delete_message(chat_id=msg.chat.id, message_id=msg.message_id)
-        await update.message.reply_text("⚠️ حدث خطأ أثناء إنشاء المنشور.")
+        await update.message.reply_text("⚠️ حدث خطأ أثناء إنشاء المنشور. حاول مجددًا.")
         raise e
 
     return ConversationHandler.END
