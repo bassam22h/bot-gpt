@@ -5,6 +5,9 @@ from firebase_admin import credentials, db
 from datetime import datetime, date
 from collections import Counter
 import logging
+from functools import wraps
+from telegram import Update
+from telegram.ext import ContextTypes
 
 # إعداد المسجل (logger)
 logger = logging.getLogger(__name__)
@@ -23,7 +26,43 @@ def initialize_firebase():
 
 initialize_firebase()
 
-# وظائف إدارة المستخدمين
+# متغيرات القناة المطلوبة
+REQUIRED_CHANNEL = os.getenv("REQUIRED_CHANNEL", "").strip()
+
+# ========== دوال إدارة الاشتراكات ==========
+async def is_user_subscribed(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    """التحقق من اشتراك المستخدم في القناة المطلوبة"""
+    if not REQUIRED_CHANNEL:
+        return True
+    try:
+        member = await context.bot.get_chat_member(REQUIRED_CHANNEL, user_id)
+        return member.status in ["member", "creator", "administrator"]
+    except Exception as e:
+        logger.error(f"Subscription check failed for {user_id}: {e}")
+        return False
+
+def require_subscription(func):
+    """ديكوراتور للتحقق من الاشتراك قبل تنفيذ الأمر"""
+    @wraps(func)
+    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
+        user_id = update.effective_user.id
+        try:
+            if not await is_user_subscribed(user_id, context):
+                channel_name = REQUIRED_CHANNEL.replace('@', '')
+                await update.message.reply_text(
+                    f"⛔️ للوصول إلى هذه الميزة، يرجى الاشتراك في قناتنا أولاً:\n\n"
+                    f"https://t.me/{channel_name}\n\n"
+                    "بعد الاشتراك، أعد المحاولة",
+                    disable_web_page_preview=True
+                )
+                return
+            return await func(update, context, *args, **kwargs)
+        except Exception as e:
+            logger.error(f"Subscription requirement failed: {e}")
+            await update.message.reply_text("⚠️ حدث خطأ أثناء التحقق من الاشتراك")
+    return wrapper
+
+# ========== دوال إدارة المستخدمين ==========
 def get_user_data(user_id: int):
     """جلب بيانات المستخدم من Firebase"""
     try:
@@ -65,7 +104,7 @@ def increment_user_count(user_id: int):
     except Exception as e:
         logger.error(f"Error incrementing count for {user_id}: {e}")
 
-# وظائف السجلات
+# ========== دوال إدارة السجلات ==========
 def log_post(user_id: int, platform: str, content: str):
     """تسجيل المنشور في قاعدة البيانات"""
     try:
@@ -86,7 +125,7 @@ def get_all_logs():
         logger.error(f"Error getting logs: {e}")
         return {}
 
-# وظائف الإحصائيات
+# ========== دوال الإحصائيات ==========
 def get_platform_usage(limit=5):
     """جلب إحصائيات استخدام المنصات"""
     try:
@@ -131,7 +170,7 @@ def clear_all_logs():
         logger.error(f"Error clearing logs: {e}")
         raise
 
-# وظائف أخرى
+# ========== دوال أخرى ==========
 def get_daily_new_users():
     """جلب عدد المستخدمين الجدد اليوم"""
     try:
