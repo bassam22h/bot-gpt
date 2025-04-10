@@ -5,8 +5,8 @@ from firebase_admin import credentials, db
 from functools import wraps
 from telegram import Update
 from telegram.ext import ContextTypes
-from datetime import datetime
-from collections import Counter
+from datetime import datetime, date
+from collections import Counter, defaultdict
 
 FIREBASE_CREDENTIALS_JSON = os.getenv("FIREBASE_CREDENTIALS_JSON")
 FIREBASE_DB_URL = "https://ai-postmakerbot-default-rtdb.asia-southeast1.firebasedatabase.app"
@@ -24,7 +24,7 @@ def get_user_data(user_id: int):
     ref = db.reference(f"/users/{user_id}")
     data = ref.get()
     if data is None:
-        return {}
+        return {"count": 0}
     return data
 
 def save_user_data(user_id: int, data: dict):
@@ -72,7 +72,7 @@ def require_subscription(func):
 # تسجيل المنشورات
 def log_post(user_id: int, platform: str, content: str):
     timestamp = datetime.utcnow().isoformat()
-    sanitized_timestamp = timestamp.replace(".", "-")
+    sanitized_timestamp = timestamp.replace(".", "-")  # تصحيح العلامات غير المسموح بها
     ref = db.reference(f"/logs/{user_id}/{sanitized_timestamp}")
     ref.set({
         "platform": platform,
@@ -87,6 +87,26 @@ def get_all_users():
 def get_all_logs():
     ref = db.reference("/logs")
     return ref.get() or {}
+
+# المستخدمين الجدد يوميًا
+def get_daily_new_users():
+    users = get_all_users()
+    daily_counts = defaultdict(int)
+    for data in users.values():
+        join_date = data.get("date")
+        if join_date:
+            daily_counts[join_date] += 1
+    return dict(sorted(daily_counts.items(), reverse=True))
+
+# ترتيب المنصات حسب الاستخدام
+def get_platform_usage():
+    logs = get_all_logs()
+    platforms = []
+    for user_logs in logs.values():
+        for entry in user_logs.values():
+            platforms.append(entry.get("platform"))
+    counter = Counter(platforms)
+    return dict(counter.most_common())
 
 # تصفير العدادات فقط دون حذف المستخدمين
 def reset_user_counts():
