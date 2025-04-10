@@ -22,9 +22,13 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     new_users = get_daily_new_users()
     platform_ranking = get_platform_usage()  # تم التعديل هنا
 
-    ranking_text = "\n".join(
-        [f"{idx+1}. {platform}: {count}" for idx, (platform, count) in enumerate(platform_ranking)]
-    ) or "لا توجد بيانات"
+    # التأكد من أن البيانات تُعاد بتنسيق مناسب (قائمة تحتوي على tuples)
+    if isinstance(platform_ranking, list):
+        ranking_text = "\n".join(
+            [f"{idx+1}. {platform}: {count}" for idx, (platform, count) in enumerate(platform_ranking)]
+        ) or "لا توجد بيانات"
+    else:
+        ranking_text = "لا توجد بيانات"
 
     text = (
         f"📊 إحصائيات البوت:\n"
