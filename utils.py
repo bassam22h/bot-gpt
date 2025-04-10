@@ -1,38 +1,41 @@
 import os
+import json
+import firebase_admin
+from firebase_admin import credentials, db
 from functools import wraps
 from telegram import Update
 from telegram.ext import ContextTypes
-import firebase_admin
-from firebase_admin import credentials, db
 
+FIREBASE_CREDENTIALS_JSON = os.getenv("FIREBASE_CREDENTIALS_JSON")
+FIREBASE_DB_URL = "https://ai-postmakerbot-default-rtdb.asia-southeast1.firebasedatabase.app"
 REQUIRED_CHANNEL = os.getenv("REQUIRED_CHANNEL")
-FIREBASE_DB_URL = os.getenv("FIREBASE_DB_URL")
 
 # تهيئة Firebase
 if not firebase_admin._apps:
-    cred_path = os.getenv("FIREBASE_CREDENTIALS")
-    cred = credentials.Certificate(cred_path)
+    cred = credentials.Certificate(json.loads(FIREBASE_CREDENTIALS_JSON))
     firebase_admin.initialize_app(cred, {
         'databaseURL': FIREBASE_DB_URL
     })
 
-def get_user_data(user_id: int) -> dict:
-    ref = db.reference(f"users/{user_id}")
+def get_user_data(user_id: int):
+    ref = db.reference(f"/users/{user_id}")
     data = ref.get()
-    return data or {"count": 0}
+    if data is None:
+        return {"count": 0}
+    return data
 
-def set_user_data(user_id: int, data: dict):
-    ref = db.reference(f"users/{user_id}")
+def save_user_data(user_id: int, data: dict):
+    ref = db.reference(f"/users/{user_id}")
     ref.set(data)
 
 def get_user_limit_status(user_id: int, limit: int = 5) -> bool:
-    user_data = get_user_data(user_id)
-    return user_data.get("count", 0) < limit
+    data = get_user_data(user_id)
+    return data.get("count", 0) < limit
 
 def increment_user_count(user_id: int):
-    user_data = get_user_data(user_id)
-    user_data["count"] = user_data.get("count", 0) + 1
-    set_user_data(user_id, user_data)
+    data = get_user_data(user_id)
+    data["count"] = data.get("count", 0) + 1
+    save_user_data(user_id, data)
 
 async def is_user_subscribed(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
     if not REQUIRED_CHANNEL:
@@ -47,7 +50,6 @@ def require_subscription(func):
     @wraps(func)
     async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
         user_id = update.effective_user.id
-
         try:
             subscribed = await is_user_subscribed(user_id, context)
         except Exception:
