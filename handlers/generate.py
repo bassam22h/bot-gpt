@@ -1,28 +1,28 @@
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
 from services.openai_service import generate_response
-from services.firebase_service import get_user_count, increment_user_count, require_subscription, load_users
+from utils import (
+    get_user_limit_status, increment_user_count,
+    require_subscription, get_user_count
+)
 
-# الحالات المطلوبة للمحادثة
 PLATFORM_CHOICE, EVENT_DETAILS = range(2)
 
 SUPPORTED_PLATFORMS = ["تويتر", "لينكدإن", "إنستغرام"]
-DAILY_LIMIT = 5  # الحد اليومي
+DAILY_LIMIT = 5
 
 @require_subscription
 async def generate_post_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    users = load_users()
-    user_data = users.get(str(user_id), {"count": 0})
-    count = user_data.get("count", 0)
+    count = get_user_count(user_id)
 
     if count >= DAILY_LIMIT:
         await update.message.reply_text("⚠️ لقد وصلت للحد الأقصى من الطلبات اليوم.")
         return ConversationHandler.END
 
     remaining = DAILY_LIMIT - count
-
     keyboard = [SUPPORTED_PLATFORMS]
+
     await update.message.reply_text(
         f"📱 اختر المنصة:\n\nلديك {remaining} من {DAILY_LIMIT} طلبات متبقية اليوم.",
         reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
@@ -52,10 +52,7 @@ async def event_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         result = generate_response(user_input, platform)
         increment_user_count(user_id)
-
-        users = load_users()
-        user_data = users.get(str(user_id), {"count": 0})
-        remaining = max(0, DAILY_LIMIT - user_data.get("count", 0))
+        remaining = max(0, DAILY_LIMIT - get_user_count(user_id))
 
         await context.bot.delete_message(chat_id=msg.chat.id, message_id=msg.message_id)
         await update.message.reply_text(result)
