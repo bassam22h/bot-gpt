@@ -122,3 +122,14 @@ def reset_user_counts():
 def clear_all_logs():
     ref = db.reference("/logs")
     ref.delete()
+
+# إضافة دالة get_new_users_today لحساب عدد المستخدمين الجدد اليوم
+def get_new_users_today(users):
+    today = str(datetime.utcnow().date())  # الحصول على تاريخ اليوم
+    new_users_count = 0
+
+    for user_data in users.values():
+        if user_data.get("date") == today:  # التحقق إذا كان تاريخ انضمام المستخدم هو اليوم
+            new_users_count += 1
+
+    return new_users_count
