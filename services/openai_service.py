@@ -41,9 +41,21 @@ def clean_content(text):
         logging.error(f"خطأ في تنظيف النص: {str(e)}")
         return str(text)[:500]
 
+def get_dialect_style_note(dialect):
+    if dialect == "المغربية":
+        return "اكتب باللهجة المغربية. استعمل كلمات مثل: بزّاف، دابا، واخّا، واش، وصياغات من الحياة اليومية."
+    elif dialect == "المصرية":
+        return "اكتب باللهجة المصرية. استعمل كلمات مثل: جامد، أوي، كده، بص، وخلي الأسلوب مصري شعبي."
+    elif dialect == "اليمنية":
+        return "اكتب باللهجة اليمنية. استعمل كلمات مثل: قد، مشّت، شلّ، ذلحين، وخلي الأسلوب يمني شعبي."
+    elif dialect:
+        return f"استخدم أسلوب {dialect} في الكتابة."
+    else:
+        return ""
+
 def generate_twitter_post(user_input, dialect=None):
     try:
-        style_note = f"استخدم أسلوب {dialect} في الكتابة." if dialect else ""
+        style_note = get_dialect_style_note(dialect)
         response = client.chat.completions.create(
             extra_headers={
                 "HTTP-Referer": SITE_URL,
@@ -132,7 +144,7 @@ def generate_response(user_input, platform, dialect=None, max_retries=None):
                     raise ValueError("فشل إنشاء التغريدة")
             else:
                 cfg = platform_config[platform]
-                style_note = f"\n- استخدم أسلوب {dialect} في الكتابة." if dialect else ""
+                style_note = get_dialect_style_note(dialect)
                 system_prompt = cfg["template"].format(
                     input=user_input,
                     hashtags=cfg["hashtags"],
