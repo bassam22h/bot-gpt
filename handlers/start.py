@@ -1,15 +1,18 @@
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes, CallbackContext
 from config import CHANNEL_USERNAME, CHANNEL_LINK
-from firebase_admin import db
+from utils import get_user_data, save_user_data
 from datetime import datetime, date
 import logging
 from telegram.constants import ParseMode
 
+# إعداد المسجل (logger)
 logger = logging.getLogger(__name__)
+
 clean_channel_username = CHANNEL_USERNAME.replace("@", "")
 
 def escape_markdown(text):
+    """هروب الأحرف الخاصة في MarkdownV2"""
     escape_chars = r'_*[]()~`>#+-=|{}.!'
     return ''.join(f'\\{char}' if char in escape_chars else char for char in text)
 
@@ -35,9 +38,9 @@ async def send_subscription_prompt(update: Update, context: CallbackContext):
     
     welcome_msg = (
         "👋 *مرحبًا بك في بوت المنشورات الذكية\\!*\n\n"
-        f"🔒 للاستخدام الكامل، اشترك في قناتنا:\n"
+        f"🔒 للوصول الكامل للميزات، يرجى الاشتراك في قناتنا:\n"
         f"https://t.me/{clean_channel_username}\n\n"
-        "بعد الاشتراك، اضغط *تحقق من الاشتراك*"
+        "بعد الاشتراك، اضغط على زر *تحقق من الاشتراك*"
     )
     
     await update.message.reply_text(
@@ -68,44 +71,37 @@ async def check_subscription_callback(update: Update, context: CallbackContext):
                 "❌ *لم يتم التحقق من اشتراكك*\n\n"
                 "1\\. تأكد من الانضمام للقناة\n"
                 "2\\. اضغط على زر التحقق مرة أخرى\n"
-                "3\\. إذا استمرت المشكلة، أعد استخدام /start",
+                "3\\. إذا استمرت المشكلة، حاول /start",
                 parse_mode=ParseMode.MARKDOWN_V2
             )
     except Exception as e:
         logger.error(f"Subscription callback failed: {e}")
         await query.edit_message_text(
-            "⚠️ حدث خطأ أثناء التحقق\\. حاول لاحقًا\\.",
+            "⚠️ حدث خطأ أثناء التحقق\\. الرجاء المحاولة لاحقًا\\.",
             parse_mode=ParseMode.MARKDOWN_V2
         )
 
 async def start_handler(update: Update, context: CallbackContext):
     user = update.effective_user
-    user_id = str(user.id)
-    ref = db.reference(f"/users/{user_id}")
 
+    # تسجيل أو تحديث بيانات المستخدم
     try:
-        user_data = ref.get()
+        existing_data = get_user_data(user.id)
 
-        if user_data:
-            ref.update({
-                "name": user.first_name or "",
-                "username": user.username or "",
-                "last_active": datetime.utcnow().isoformat()
-            })
-        else:
-            today = date.today().strftime("%Y-%m-%d")
-            ref.set({
-                "name": user.first_name or "",
-                "username": user.username or "",
-                "daily_usage": 0,
-                "last_usage_date": today,
-                "joined_at": datetime.utcnow().isoformat(),
-                "last_active": datetime.utcnow().isoformat()
-            })
+        updated_data = {
+            "first_name": user.first_name or "",
+            "username": user.username or "",
+            "date": existing_data.get("date") or str(date.today()),
+            "count": existing_data.get("count", 0),
+            "last_active": str(datetime.utcnow())
+        }
+
+        save_user_data(user.id, updated_data)
 
     except Exception as e:
-        logger.error(f"Failed to register/update user {user_id}: {e}")
+        logger.error(f"Failed to register/update user {user.id}: {e}")
 
+    # التحقق من الاشتراك
     try:
         if not await check_subscription(update, context):
             await send_subscription_prompt(update, context)
@@ -117,7 +113,7 @@ async def start_handler(update: Update, context: CallbackContext):
             "📝 /generate \\- إنشاء منشور جديد\n"
             "ℹ️ /help \\- عرض التعليمات\n"
             "👨‍💻 /admin \\- لوحة التحكم للمشرفين\n\n"
-            "🛠️ البوت يدعم إنشاء منشورات لتويتر، لينكدإن وإنستغرام"
+            "🛠️ البوت يدعم إنشاء منشورات لتويتر، لينكدإن وإنستغرام\\."
         )
         
         await update.message.reply_text(
