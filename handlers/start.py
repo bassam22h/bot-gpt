@@ -2,7 +2,7 @@ from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes, CallbackContext
 from config import CHANNEL_USERNAME, CHANNEL_LINK
 from utils import get_user_data, save_user_data
-from datetime import datetime
+from datetime import datetime, date
 import logging
 from telegram.constants import ParseMode
 
@@ -55,7 +55,7 @@ async def check_subscription_callback(update: Update, context: CallbackContext):
                 "🎉 *تم التحقق بنجاح\!*\n\n"
                 "يمكنك الآن استخدام جميع ميزات البوت:\n"
                 "📝 /generate \- لإنشاء منشور جديد\n"
-                "👨‍💻 /admin \- لوحة التحكم \(للمشرفين\)"
+                "👨‍💻 /admin \- لوحة التحكم للمشرفين"
             )
             await query.edit_message_text(
                 success_msg,
@@ -78,21 +78,23 @@ async def check_subscription_callback(update: Update, context: CallbackContext):
 
 async def start_handler(update: Update, context: CallbackContext):
     user = update.effective_user
-    
-    # تسجيل بيانات المستخدم
+
+    # تسجيل أو تحديث بيانات المستخدم
     try:
-        user_data = get_user_data(user.id)
-        if not user_data:
-            user_data = {
-                "first_name": user.first_name,
-                "username": user.username,
-                "date": str(datetime.utcnow().date()),
-                "count": 0,
-                "last_active": str(datetime.utcnow())
-            }
-            save_user_data(user.id, user_data)
+        existing_data = get_user_data(user.id)
+
+        updated_data = {
+            "first_name": user.first_name or "",
+            "username": user.username or "",
+            "date": existing_data.get("date") or str(date.today()),
+            "count": existing_data.get("count", 0),
+            "last_active": str(datetime.utcnow())
+        }
+
+        save_user_data(user.id, updated_data)
+
     except Exception as e:
-        logger.error(f"Failed to register user {user.id}: {e}")
+        logger.error(f"Failed to register/update user {user.id}: {e}")
 
     # التحقق من الاشتراك
     try:
@@ -105,7 +107,7 @@ async def start_handler(update: Update, context: CallbackContext):
             "🎯 *اختر أحد الخيارات:*\n"
             "📝 /generate \- إنشاء منشور جديد\n"
             "ℹ️ /help \- عرض التعليمات\n"
-            "👨‍💻 /admin \- لوحة التحكم \(للمشرفين\)\n\n"
+            "👨‍💻 /admin \- لوحة التحكم للمشرفين\n\n"
             "🛠️ البوت يدعم إنشاء منشورات لتويتر، لينكدإن وإنستغرام"
         )
         
@@ -125,6 +127,6 @@ async def start_handler(update: Update, context: CallbackContext):
         )
 
 def escape_markdown(text):
-    """هروب الأحخاص الخاصة في MarkdownV2"""
+    """هروب الأحرف الخاصة في MarkdownV2"""
     escape_chars = r'_*[]()~`>#+-=|{}.!'
     return ''.join(f'\\{char}' if char in escape_chars else char for char in text)
