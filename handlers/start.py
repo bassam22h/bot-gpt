@@ -36,8 +36,8 @@ async def send_subscription_prompt(update: Update, context: CallbackContext):
         ]
     ])
     
-    welcome_msg = (
-        "👋 *مرحبًا بك في بوت المنشورات الذكية\\!*\n\n"
+    welcome_msg = escape_markdown(
+        "👋 *مرحبًا بك في بوت المنشورات الذكية!*\n\n"
         f"🔒 للوصول الكامل للميزات، يرجى الاشتراك في قناتنا:\n"
         f"https://t.me/{clean_channel_username}\n\n"
         "بعد الاشتراك، اضغط على زر *تحقق من الاشتراك*"
@@ -56,28 +56,34 @@ async def check_subscription_callback(update: Update, context: CallbackContext):
     
     try:
         if await check_subscription(update, context):
-            success_msg = (
-                "🎉 *تم التحقق بنجاح\\!*\n\n"
+            success_msg = escape_markdown(
+                "🎉 *تم التحقق بنجاح!*\n\n"
                 "يمكنك الآن استخدام جميع ميزات البوت:\n"
-                "📝 /generate \\- لإنشاء منشور جديد\n"
-                "👨‍💻 /admin \\- لوحة التحكم للمشرفين"
+                "📝 /generate - لإنشاء منشور جديد\n"
+                "👨‍💻 /admin - لوحة التحكم للمشرفين"
             )
             await query.edit_message_text(
                 success_msg,
                 parse_mode=ParseMode.MARKDOWN_V2
             )
         else:
-            await query.edit_message_text(
+            fail_msg = escape_markdown(
                 "❌ *لم يتم التحقق من اشتراكك*\n\n"
-                "1\\. تأكد من الانضمام للقناة\n"
-                "2\\. اضغط على زر التحقق مرة أخرى\n"
-                "3\\. إذا استمرت المشكلة، حاول /start",
+                "1. تأكد من الانضمام للقناة\n"
+                "2. اضغط على زر التحقق مرة أخرى\n"
+                "3. إذا استمرت المشكلة، حاول /start"
+            )
+            await query.edit_message_text(
+                fail_msg,
                 parse_mode=ParseMode.MARKDOWN_V2
             )
     except Exception as e:
         logger.error(f"Subscription callback failed: {e}")
+        error_msg = escape_markdown(
+            "⚠️ حدث خطأ أثناء التحقق. الرجاء المحاولة لاحقًا."
+        )
         await query.edit_message_text(
-            "⚠️ حدث خطأ أثناء التحقق\\. الرجاء المحاولة لاحقًا",
+            error_msg,
             parse_mode=ParseMode.MARKDOWN_V2
         )
 
@@ -107,12 +113,12 @@ async def start_handler(update: Update, context: CallbackContext):
             await send_subscription_prompt(update, context)
             return
 
-        welcome_msg = (
-            f"👋 *أهلاً بعودتك، {escape_markdown(user.first_name)}\\!*\n\n"
+        welcome_msg = escape_markdown(
+            f"👋 *أهلاً بعودتك، {user.first_name}!* \n\n"
             "🎯 *اختر أحد الخيارات:*\n"
-            "📝 /generate \\- إنشاء منشور جديد\n"
-            "ℹ️ /help \\- عرض التعليمات\n"
-            "👨‍💻 /admin \\- لوحة التحكم للمشرفين\n\n"
+            "📝 /generate - إنشاء منشور جديد\n"
+            "ℹ️ /help - عرض التعليمات\n"
+            "👨‍💻 /admin - لوحة التحكم للمشرفين\n\n"
             "🛠️ البوت يدعم إنشاء منشورات لتويتر، لينكدإن وإنستغرام"
         )
         
@@ -126,7 +132,8 @@ async def start_handler(update: Update, context: CallbackContext):
         )
     except Exception as e:
         logger.error(f"Start handler failed for {user.id}: {e}")
+        error_msg = escape_markdown("⚠️ حدث خطأ أثناء تحميل البيانات. الرجاء المحاولة لاحقًا.")
         await update.message.reply_text(
-            "⚠️ حدث خطأ أثناء تحميل البيانات\\. الرجاء المحاولة لاحقًا",
+            error_msg,
             parse_mode=ParseMode.MARKDOWN_V2
         )
