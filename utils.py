@@ -42,13 +42,28 @@ def require_subscription(func):
     @wraps(func)
     async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
         try:
-            user = update.effective_user
-            if not user or not hasattr(user, 'id') or user.id is None:
-                logger.error("المستخدم غير موجود أو المعرّف غير صالح.")
+            user = None
+            user_id = None
+
+            # محاولة الحصول على المستخدم من مختلف أنواع التحديثات
+            if update.effective_user:
+                user = update.effective_user
+                user_id = user.id
+            elif update.message and update.message.from_user:
+                user = update.message.from_user
+                user_id = user.id
+            elif update.callback_query and update.callback_query.from_user:
+                user = update.callback_query.from_user
+                user_id = user.id
+
+            logger.debug(f"user: {user}, user_id: {user_id}")
+
+            # التحقق من أن user_id صالح
+            if user_id is None or not isinstance(user_id, int):
+                logger.error("فشل في الحصول على user_id صالح.")
                 return
 
-            user_id = int(user.id)
-
+            # التحقق من الاشتراك
             if not await is_user_subscribed(user_id, context):
                 channel_name = REQUIRED_CHANNEL.replace('@', '')
                 msg = (
@@ -62,14 +77,19 @@ def require_subscription(func):
                     await update.callback_query.answer()
                     await update.callback_query.edit_message_text(msg, disable_web_page_preview=True)
                 return
+
             return await func(update, context, *args, **kwargs)
+
         except Exception as e:
-            logger.error(f"Subscription decorator error: {e}")
+            logger.exception(f"Subscription decorator error: {e}")
             error_msg = "⚠️ حدث خطأ أثناء التحقق من الاشتراك"
-            if update.message:
-                await update.message.reply_text(error_msg)
-            elif update.callback_query:
-                await update.callback_query.answer(error_msg, show_alert=True)
+            try:
+                if update.message:
+                    await update.message.reply_text(error_msg)
+                elif update.callback_query:
+                    await update.callback_query.answer(error_msg, show_alert=True)
+            except Exception as nested_e:
+                logger.error(f"Failed to send error message to user: {nested_e}")
     return wrapper
 
 # ============= دوال المستخدمين =============
