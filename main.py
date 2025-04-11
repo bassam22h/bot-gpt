@@ -16,7 +16,6 @@ from handlers.admin import (
     receive_broadcast_message
 )
 
-# إعداد التسجيل
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
@@ -29,11 +28,9 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⚠️ حدث خطأ غير متوقع. الرجاء المحاولة لاحقًا.")
 
 def setup_handlers(app):
-    # أوامر عامة
     app.add_handler(CommandHandler("start", start_handler))
     app.add_handler(CallbackQueryHandler(check_subscription_callback, pattern="^check_subscription$"))
-
-    # إنشاء المنشورات
+    
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("generate", generate_post_handler)],
         states={
@@ -44,41 +41,21 @@ def setup_handlers(app):
         allow_reentry=True
     )
     app.add_handler(conv_handler)
-
-    # أوامر المشرف
+    
     app.add_handler(CommandHandler("admin", admin_panel))
     app.add_handler(CallbackQueryHandler(handle_admin_actions, pattern="^(view_statistics|reset_counts_|clear_logs_|broadcast_)"))
     app.add_handler(MessageHandler(filters.TEXT & filters.User(ADMIN_IDS), receive_broadcast_message))
 
-async def setup_webhook(app):
-    """إعداد وتفعيل الويب هوك"""
-    webhook_url = f"https://{os.getenv('RENDER_APP_NAME')}.onrender.com/{TOKEN}"
-    await app.bot.set_webhook(
-        url=webhook_url,
-        drop_pending_updates=True,
-        secret_token=os.getenv("WEBHOOK_SECRET", "")
-    )
-    logger.info(f"Webhook set to: {webhook_url}")
-
 def main():
     app = ApplicationBuilder().token(TOKEN).build()
-    
-    # تسجيل المعالجات
     setup_handlers(app)
-    
-    # معالج الأخطاء
     app.add_error_handler(error_handler)
 
-    # تشغيل البوت
     if os.getenv("RENDER"):
-        PORT = int(os.getenv("PORT", 8443))
-        WEBHOOK_URL = f"https://{os.getenv('RENDER_APP_NAME')}.onrender.com/{TOKEN}"
-        
-        # إعداد الويب هوك بشكل منفصل
         app.run_webhook(
             listen="0.0.0.0",
-            port=PORT,
-            webhook_url=WEBHOOK_URL,
+            port=int(os.getenv("PORT", 8443)),
+            webhook_url=f"https://{os.getenv('RENDER_APP_NAME')}.onrender.com/{TOKEN}",
             secret_token=os.getenv("WEBHOOK_SECRET", "")
         )
     else:
