@@ -9,10 +9,9 @@ from functools import wraps
 from telegram import Update
 from telegram.ext import ContextTypes
 
-# إعداد المسجل (logger)
 logger = logging.getLogger(__name__)
 
-# تهيئة Firebase
+# ============= تهيئة Firebase =============
 def initialize_firebase():
     if not firebase_admin._apps:
         try:
@@ -26,12 +25,10 @@ def initialize_firebase():
 
 initialize_firebase()
 
-# إعدادات القناة المطلوبة
 REQUIRED_CHANNEL = os.getenv("REQUIRED_CHANNEL", "").strip()
 
 # ============= دوال الاشتراك =============
 async def is_user_subscribed(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    """التحقق من اشتراك المستخدم في القناة"""
     if not REQUIRED_CHANNEL:
         return True
     try:
@@ -42,7 +39,6 @@ async def is_user_subscribed(user_id: int, context: ContextTypes.DEFAULT_TYPE) -
         return False
 
 def require_subscription(func):
-    """ديكوراتور للتحقق من الاشتراك قبل تنفيذ الأمر"""
     @wraps(func)
     async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
         user_id = update.effective_user.id
@@ -64,7 +60,6 @@ def require_subscription(func):
 
 # ============= دوال المستخدمين =============
 def get_all_users() -> dict:
-    """جلب جميع المستخدمين"""
     try:
         return db.reference("/users").get() or {}
     except Exception as e:
@@ -72,7 +67,6 @@ def get_all_users() -> dict:
         return {}
 
 def get_user_data(user_id: int) -> dict:
-    """جلب بيانات مستخدم معين"""
     try:
         return db.reference(f"/users/{user_id}").get() or {
             "count": 0,
@@ -86,14 +80,12 @@ def get_user_data(user_id: int) -> dict:
         return {"count": 0}
 
 def save_user_data(user_id: int, data: dict):
-    """حفظ بيانات المستخدم"""
     try:
         db.reference(f"/users/{user_id}").set(data)
     except Exception as e:
         logger.error(f"Error saving user data: {e}")
 
 def get_user_limit_status(user_id: int, limit: int = 5) -> bool:
-    """التحقق من عدم تجاوز الحد اليومي"""
     try:
         user_data = get_user_data(user_id)
         return user_data.get("count", 0) < limit
@@ -101,15 +93,17 @@ def get_user_limit_status(user_id: int, limit: int = 5) -> bool:
         logger.error(f"Error checking user limit: {e}")
         return False
 
+def has_reached_limit(user_id: int, limit: int = 5) -> bool:
+    """هل المستخدم تجاوز الحد اليومي"""
+    return not get_user_limit_status(user_id, limit)
+
 def increment_user_count(user_id: int):
-    """زيادة عداد استخدامات المستخدم مع التحقق من التاريخ"""
     try:
         user_ref = db.reference(f"/users/{user_id}")
         current_data = user_ref.get() or {}
         current_date = str(date.today())
 
         if current_data.get("date") != current_date:
-            # إعادة تعيين العداد إذا كان التاريخ قديم
             user_ref.update({
                 "count": 1,
                 "date": current_date,
@@ -117,7 +111,7 @@ def increment_user_count(user_id: int):
             })
         else:
             user_ref.update({
-                "count": firebase_admin.db.Increment(1),
+                "count": db.Increment(1),
                 "last_active": str(datetime.utcnow())
             })
     except Exception as e:
@@ -125,7 +119,6 @@ def increment_user_count(user_id: int):
 
 # ============= دوال المنشورات =============
 def get_all_logs() -> dict:
-    """جلب جميع سجلات المنشورات"""
     try:
         return db.reference("/logs").get() or {}
     except Exception as e:
@@ -133,7 +126,6 @@ def get_all_logs() -> dict:
         return {}
 
 def log_post(user_id: int, platform: str, content: str):
-    """تسجيل منشور جديد"""
     try:
         post_ref = db.reference(f"/logs/{user_id}").push()
         post_ref.set({
@@ -146,7 +138,6 @@ def log_post(user_id: int, platform: str, content: str):
 
 # ============= دوال الإحصائيات =============
 def get_platform_usage(limit: int = 5) -> list:
-    """ترتيب المنصات حسب الاستخدام"""
     try:
         logs = get_all_logs()
         platforms = []
@@ -163,7 +154,6 @@ def get_platform_usage(limit: int = 5) -> list:
         return []
 
 def get_daily_new_users() -> int:
-    """عدد المستخدمين الجدد اليوم"""
     try:
         users = get_all_users()
         today = str(date.today())
@@ -174,7 +164,6 @@ def get_daily_new_users() -> int:
 
 # ============= دوال الإدارة =============
 def reset_user_counts():
-    """تصفير جميع عدادات المستخدمين"""
     try:
         users_ref = db.reference("/users")
         users = users_ref.get() or {}
@@ -186,7 +175,6 @@ def reset_user_counts():
         raise
 
 def clear_all_logs():
-    """حذف جميع سجلات المنشورات"""
     try:
         db.reference("/logs").delete()
         logger.info("All logs cleared successfully")
