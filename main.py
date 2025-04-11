@@ -47,7 +47,7 @@ def setup_handlers(app):
     app.add_handler(MessageHandler(filters.TEXT & filters.User(ADMIN_IDS), receive_broadcast_message))
 
 def main():
-    app = ApplicationBuilder().token(TOKEN).build()
+    app = ApplicationBuilder().token(TOKEN).webhook_path(f"/{TOKEN}").build()  # تم تعديل هذا السطر
     setup_handlers(app)
     app.add_error_handler(error_handler)
 
