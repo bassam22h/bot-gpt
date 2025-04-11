@@ -44,12 +44,13 @@ async def send_subscription_prompt(update: Update, context: CallbackContext):
         "بعد الاشتراك، اضغط على زر <b>تحقق من الاشتراك</b>"
     )
 
-    await update.message.reply_text(
-        welcome_msg,
-        reply_markup=keyboard,
-        parse_mode=ParseMode.HTML,
-        disable_web_page_preview=True
-    )
+    if update.message:
+        await update.message.reply_text(
+            welcome_msg,
+            reply_markup=keyboard,
+            parse_mode=ParseMode.HTML,
+            disable_web_page_preview=True
+        )
 
 async def check_subscription_callback(update: Update, context: CallbackContext):
     query = update.callback_query
@@ -118,17 +119,20 @@ async def start_handler(update: Update, context: CallbackContext):
             "🛠️ البوت يدعم إنشاء منشورات لتويتر، لينكدإن وإنستغرام"
         )
 
-        await update.message.reply_text(
-            welcome_msg,
-            parse_mode=ParseMode.HTML,
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("📢 قناتنا", url=CHANNEL_LINK)]
-            ]),
-            disable_web_page_preview=True
-        )
+        if update.message:
+            await update.message.reply_text(
+                welcome_msg,
+                parse_mode=ParseMode.HTML,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("📢 قناتنا", url=CHANNEL_LINK)]
+                ]),
+                disable_web_page_preview=True
+            )
+
     except Exception as e:
         logger.error(f"Start handler failed for {user.id}: {e}")
-        await update.message.reply_text(
-            "⚠️ حدث خطأ أثناء تحميل البيانات. الرجاء المحاولة لاحقًا.",
-            parse_mode=ParseMode.HTML
-        )
+        if update.message:
+            await update.message.reply_text(
+                "⚠️ حدث خطأ أثناء تحميل البيانات. الرجاء المحاولة لاحقًا.",
+                parse_mode=ParseMode.HTML
+            )
