@@ -56,13 +56,9 @@ def main():
     app.add_error_handler(error_handler)
 
     if os.getenv("RENDER"):
-        # تأكيد اسم التطبيق الصحيح
-        app_name = os.getenv("RENDER_APP_NAME")
-        if not app_name:
-            raise ValueError("RENDER_APP_NAME is missing in environment variables.")
-        
+        # استخدم رابط webhook ثابت مباشرة
+        webhook_url = "https://bassam-hammeed-bot.onrender.com/"
         port = int(os.getenv("PORT", 8443))
-        webhook_url = f"https://{app_name}.onrender.com/{TOKEN}"
 
         print(f"Starting webhook on Render: {webhook_url}")
         app.run_webhook(
