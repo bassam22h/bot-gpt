@@ -43,11 +43,11 @@ def require_subscription(func):
     async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
         try:
             user = update.effective_user
-            user_id = getattr(user, "id", None)
+            if not user or not isinstance(user.id, int):
+                logger.error("المستخدم غير موجود أو المعرّف غير صالح.")
+                return
 
-            # تحقق من وجود معرف المستخدم
-            if not isinstance(user_id, int):
-                raise ValueError("معرّف المستخدم غير صالح أو مفقود")
+            user_id = user.id
 
             if not await is_user_subscribed(user_id, context):
                 channel_name = REQUIRED_CHANNEL.replace('@', '')
