@@ -56,8 +56,7 @@ def main():
             listen="0.0.0.0",
             port=int(os.getenv("PORT", 8443)),
             webhook_url=f"https://{os.getenv('RENDER_APP_NAME')}.onrender.com/{TOKEN}",
-            secret_token=os.getenv("WEBHOOK_SECRET", ""),
-            path=f"/{TOKEN}"
+            secret_token=os.getenv("WEBHOOK_SECRET", "")
         )
     else:
         app.run_polling()
