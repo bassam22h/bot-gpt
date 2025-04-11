@@ -41,21 +41,37 @@ async def is_user_subscribed(user_id: int, context: ContextTypes.DEFAULT_TYPE) -
 def require_subscription(func):
     @wraps(func)
     async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
-        user_id = update.effective_user.id
         try:
+            user = update.effective_user
+            if not user or not user.id:
+                raise ValueError("لا يمكن تحديد المستخدم")
+            user_id = user.id
+
             if not await is_user_subscribed(user_id, context):
                 channel_name = REQUIRED_CHANNEL.replace('@', '')
-                await update.message.reply_text(
-                    f"🔐 للوصول إلى هذه الميزة، يرجى الاشتراك في قناتنا:\n\n"
-                    f"https://t.me/{channel_name}\n\n"
-                    "بعد الاشتراك، أعد المحاولة",
-                    disable_web_page_preview=True
-                )
+                if update.message:
+                    await update.message.reply_text(
+                        f"🔐 للوصول إلى هذه الميزة، يرجى الاشتراك في قناتنا:\n\n"
+                        f"https://t.me/{channel_name}\n\n"
+                        "بعد الاشتراك، أعد المحاولة",
+                        disable_web_page_preview=True
+                    )
+                elif update.callback_query:
+                    await update.callback_query.answer()
+                    await update.callback_query.edit_message_text(
+                        f"🔐 للوصول إلى هذه الميزة، يرجى الاشتراك في قناتنا:\n\n"
+                        f"https://t.me/{channel_name}\n\n"
+                        "بعد الاشتراك، أعد المحاولة",
+                        disable_web_page_preview=True
+                    )
                 return
             return await func(update, context, *args, **kwargs)
         except Exception as e:
             logger.error(f"Subscription decorator error: {e}")
-            await update.message.reply_text("⚠️ حدث خطأ أثناء التحقق من الاشتراك")
+            if update.message:
+                await update.message.reply_text("⚠️ حدث خطأ أثناء التحقق من الاشتراك")
+            elif update.callback_query:
+                await update.callback_query.answer("⚠️ حدث خطأ أثناء التحقق من الاشتراك", show_alert=True)
     return wrapper
 
 # ============= دوال المستخدمين =============
