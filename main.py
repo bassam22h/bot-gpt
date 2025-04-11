@@ -2,17 +2,27 @@ import logging
 import os
 from telegram import Update
 from telegram.ext import (
-    ApplicationBuilder, CommandHandler, CallbackQueryHandler,
-    MessageHandler, ContextTypes, filters
+    ApplicationBuilder,
+    CommandHandler,
+    CallbackQueryHandler,
+    MessageHandler,
+    ContextTypes,
+    filters,
+    ConversationHandler  # هذا ما كان ناقصًا
 )
 from config import TOKEN, ADMIN_IDS
 from handlers.start import start_handler, check_subscription_callback
 from handlers.generate import (
-    generate_post_handler, platform_choice, 
-    event_details, cancel, PLATFORM_CHOICE, EVENT_DETAILS
+    generate_post_handler,
+    platform_choice,
+    event_details,
+    cancel,
+    PLATFORM_CHOICE,
+    EVENT_DETAILS
 )
 from handlers.admin import (
-    admin_panel, handle_admin_actions, 
+    admin_panel,
+    handle_admin_actions,
     receive_broadcast_message
 )
 
