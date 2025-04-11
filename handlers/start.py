@@ -77,7 +77,7 @@ async def check_subscription_callback(update: Update, context: CallbackContext):
     except Exception as e:
         logger.error(f"Subscription callback failed: {e}")
         await query.edit_message_text(
-            "⚠️ حدث خطأ أثناء التحقق\\. الرجاء المحاولة لاحقًا\\.",
+            "⚠️ حدث خطأ أثناء التحقق\\. الرجاء المحاولة لاحقًا",
             parse_mode=ParseMode.MARKDOWN_V2
         )
 
@@ -113,7 +113,7 @@ async def start_handler(update: Update, context: CallbackContext):
             "📝 /generate \\- إنشاء منشور جديد\n"
             "ℹ️ /help \\- عرض التعليمات\n"
             "👨‍💻 /admin \\- لوحة التحكم للمشرفين\n\n"
-            "🛠️ البوت يدعم إنشاء منشورات لتويتر، لينكدإن وإنستغرام\\."
+            "🛠️ البوت يدعم إنشاء منشورات لتويتر، لينكدإن وإنستغرام"
         )
         
         await update.message.reply_text(
@@ -127,6 +127,6 @@ async def start_handler(update: Update, context: CallbackContext):
     except Exception as e:
         logger.error(f"Start handler failed for {user.id}: {e}")
         await update.message.reply_text(
-            "⚠️ حدث خطأ أثناء تحميل البيانات\\. الرجاء المحاولة لاحقًا\\.",
+            "⚠️ حدث خطأ أثناء تحميل البيانات\\. الرجاء المحاولة لاحقًا",
             parse_mode=ParseMode.MARKDOWN_V2
         )
