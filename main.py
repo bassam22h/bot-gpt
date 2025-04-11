@@ -8,11 +8,11 @@ from telegram.ext import (
 from config import TOKEN, ADMIN_IDS
 from handlers.start import start_handler, check_subscription_callback
 from handlers.generate import (
-    generate_post_handler, platform_choice, 
+    generate_post_handler, platform_choice,
     event_details, cancel, PLATFORM_CHOICE, EVENT_DETAILS
 )
 from handlers.admin import (
-    admin_panel, handle_admin_actions, 
+    admin_panel, handle_admin_actions,
     receive_broadcast_message
 )
 
@@ -31,7 +31,7 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
 def setup_handlers(app):
     app.add_handler(CommandHandler("start", start_handler))
     app.add_handler(CallbackQueryHandler(check_subscription_callback, pattern="^check_subscription$"))
-    
+
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("generate", generate_post_handler)],
         states={
@@ -42,26 +42,36 @@ def setup_handlers(app):
         allow_reentry=True
     )
     app.add_handler(conv_handler)
-    
+
     app.add_handler(CommandHandler("admin", admin_panel))
     app.add_handler(CallbackQueryHandler(handle_admin_actions, pattern="^(view_statistics|reset_counts_|clear_logs_|broadcast_)"))
     app.add_handler(MessageHandler(filters.TEXT & filters.User(ADMIN_IDS), receive_broadcast_message))
 
 def main():
+    if not TOKEN:
+        raise ValueError("TELEGRAM_BOT_TOKEN is missing or not set in environment variables.")
+    
     app = ApplicationBuilder().token(TOKEN).build()
     setup_handlers(app)
     app.add_error_handler(error_handler)
 
     if os.getenv("RENDER"):
-        webhook_url = f"https://bassam-hammeed-bot.onrender.com/{TOKEN}"
-        print(f"Starting bot using webhook: {webhook_url}")
+        # تأكيد اسم التطبيق الصحيح
+        app_name = os.getenv("RENDER_APP_NAME")
+        if not app_name:
+            raise ValueError("RENDER_APP_NAME is missing in environment variables.")
+        
+        port = int(os.getenv("PORT", 8443))
+        webhook_url = f"https://{app_name}.onrender.com/{TOKEN}"
+
+        print(f"Starting webhook on Render: {webhook_url}")
         app.run_webhook(
             listen="0.0.0.0",
-            port=int(os.getenv("PORT", 8443)),
+            port=port,
             webhook_url=webhook_url
         )
     else:
-        print("Starting bot using polling...")
+        print("Running in polling mode...")
         app.run_polling()
 
 if __name__ == "__main__":
