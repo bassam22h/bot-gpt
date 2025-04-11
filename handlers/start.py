@@ -1,16 +1,20 @@
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes, CallbackContext
 from config import CHANNEL_USERNAME, CHANNEL_LINK
-from utils import get_user_data, save_user_data
+from firebase_admin import db
 from datetime import datetime, date
 import logging
 from telegram.constants import ParseMode
 
 # إعداد المسجل (logger)
 logger = logging.getLogger(__name__)
-
 clean_channel_username = CHANNEL_USERNAME.replace("@", "")
 
+def escape_markdown(text):
+    escape_chars = r'_*[]()~`>#+-=|{}.!'
+    return ''.join(f'\\{char}' if char in escape_chars else char for char in text)
+
+# دالة التحقق من الاشتراك
 async def check_subscription(update: Update, context: CallbackContext) -> bool:
     user = update.effective_user
     try:
@@ -23,6 +27,7 @@ async def check_subscription(update: Update, context: CallbackContext) -> bool:
         logger.error(f"Subscription check failed for {user.id}: {e}")
         return False
 
+# رسالة الانضمام للقناة
 async def send_subscription_prompt(update: Update, context: CallbackContext):
     keyboard = InlineKeyboardMarkup([
         [
@@ -45,6 +50,7 @@ async def send_subscription_prompt(update: Update, context: CallbackContext):
         disable_web_page_preview=True
     )
 
+# التحقق من الاشتراك من الزر
 async def check_subscription_callback(update: Update, context: CallbackContext):
     query = update.callback_query
     await query.answer()
@@ -55,7 +61,7 @@ async def check_subscription_callback(update: Update, context: CallbackContext):
                 "🎉 *تم التحقق بنجاح\!*\n\n"
                 "يمكنك الآن استخدام جميع ميزات البوت:\n"
                 "📝 /generate \- لإنشاء منشور جديد\n"
-                "👨‍💻 /admin \- لوحة التحكم (للمشرفين)"
+                "👨‍💻 /admin \- لوحة التحكم (للمشرفين)"
             )
             await query.edit_message_text(
                 success_msg,
@@ -76,25 +82,36 @@ async def check_subscription_callback(update: Update, context: CallbackContext):
             parse_mode=ParseMode.MARKDOWN_V2
         )
 
+# معالجة أمر /start
 async def start_handler(update: Update, context: CallbackContext):
     user = update.effective_user
+    user_id = str(user.id)
+    ref = db.reference(f"/users/{user_id}")
 
-    # تسجيل أو تحديث بيانات المستخدم
     try:
-        existing_data = get_user_data(user.id)
+        user_data = ref.get()
 
-        updated_data = {
-            "first_name": user.first_name or "",
-            "username": user.username or "",
-            "date": existing_data.get("date") or str(date.today()),
-            "count": existing_data.get("count", 0),
-            "last_active": str(datetime.utcnow())
-        }
-
-        save_user_data(user.id, updated_data)
+        if user_data:
+            # المستخدم موجود - لا نعيد تعيين count أو التاريخ
+            ref.update({
+                "name": user.first_name or "",
+                "username": user.username or "",
+                "last_active": datetime.utcnow().isoformat()
+            })
+        else:
+            # مستخدم جديد
+            today = date.today().strftime("%Y-%m-%d")
+            ref.set({
+                "name": user.first_name or "",
+                "username": user.username or "",
+                "daily_usage": 0,
+                "last_usage_date": today,
+                "joined_at": datetime.utcnow().isoformat(),
+                "last_active": datetime.utcnow().isoformat()
+            })
 
     except Exception as e:
-        logger.error(f"Failed to register/update user {user.id}: {e}")
+        logger.error(f"Failed to register/update user {user_id}: {e}")
 
     # التحقق من الاشتراك
     try:
@@ -125,8 +142,3 @@ async def start_handler(update: Update, context: CallbackContext):
             "⚠️ حدث خطأ أثناء تحميل البيانات\. الرجاء المحاولة لاحقًا\.",
             parse_mode=ParseMode.MARKDOWN_V2
         )
-
-def escape_markdown(text):
-    """هروب الأحرف الخاصة في MarkdownV2"""
-    escape_chars = r'_*[]()~`>#+-=|{}.!'
-    return ''.join(f'\\{char}' if char in escape_chars else char for char in text)
