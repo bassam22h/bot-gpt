@@ -41,8 +41,9 @@ def clean_content(text):
         logging.error(f"خطأ في تنظيف النص: {str(e)}")
         return str(text)[:500]
 
-def generate_twitter_post(user_input):
+def generate_twitter_post(user_input, dialect=None):
     try:
+        style_note = f"استخدم أسلوب {dialect} في الكتابة." if dialect else ""
         response = client.chat.completions.create(
             extra_headers={
                 "HTTP-Referer": SITE_URL,
@@ -50,7 +51,7 @@ def generate_twitter_post(user_input):
             },
             model="meta-llama/llama-4-maverick:free",
             messages=[
-                {"role": "system", "content": """
+                {"role": "system", "content": f"""
 أنت خبير محتوى عربي على تويتر.
 - أنشئ تغريدة جذابة حول الفكرة التالية.
 - استخدم أسلوبًا بسيطًا غير رسمي.
@@ -58,6 +59,7 @@ def generate_twitter_post(user_input):
 - أضف 2-3 هاشتاقات مناسبة.
 - استخدم إيموجي معبّرة.
 - لا تذكر "في هذه التغريدة" أو "إليك".
+{style_note}
 """},
                 {"role": "user", "content": user_input}
             ],
@@ -87,6 +89,7 @@ def generate_response(user_input, platform, dialect=None, max_retries=None):
 - أنهِ المنشور برسالة ملهمة أو نصيحة واقعية
 - استخدم أسلوبًا بسيطًا لكنه راقٍ
 - أضف بعض الإيموجي المناسبة و3 هاشتاقات مثل: {hashtags}
+{style_note}
 """,
             "emojis": ["💼", "📈", "🏆", "🔍", "🚀"],
             "hashtags": "#تطوير_مهني #ريادة_أعمال #نصائح_وظيفية"
@@ -101,6 +104,7 @@ def generate_response(user_input, platform, dialect=None, max_retries=None):
 - استخدم جمل قصيرة أو تنسيقات نقطية
 - أضف إيموجي جذابة بكثرة
 - ضع في النهاية 3-4 هاشتاقات مثل: {hashtags}
+{style_note}
 """,
             "emojis": ["❤️", "🌟", "📸", "💫", "🌈"],
             "hashtags": "#الهام #ابداع #تطوير_الذات #حب_الحياة"
@@ -113,7 +117,6 @@ def generate_response(user_input, platform, dialect=None, max_retries=None):
     if platform not in platform_config:
         return f"⚠️ المنصة غير مدعومة. الخيارات المتاحة: {', '.join(platform_config.keys())}"
 
-    # تأكد أن max_retries عدد صحيح
     try:
         max_retries = int(max_retries)
     except (TypeError, ValueError):
@@ -124,14 +127,16 @@ def generate_response(user_input, platform, dialect=None, max_retries=None):
             logging.info(f"جاري إنشاء منشور لـ {platform} - المحاولة {attempt + 1}")
 
             if platform == "تويتر":
-                content = platform_config[platform]["generator"](user_input)
+                content = platform_config[platform]["generator"](user_input, dialect)
                 if not content:
                     raise ValueError("فشل إنشاء التغريدة")
             else:
                 cfg = platform_config[platform]
+                style_note = f"\n- استخدم أسلوب {dialect} في الكتابة." if dialect else ""
                 system_prompt = cfg["template"].format(
                     input=user_input,
-                    hashtags=cfg["hashtags"]
+                    hashtags=cfg["hashtags"],
+                    style_note=style_note
                 )
 
                 user_prompt = f"أنشئ منشورًا إبداعيًا. استخدم هذه الإيموجي: {', '.join(random.sample(cfg['emojis'], 3))}"
