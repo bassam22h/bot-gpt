@@ -70,7 +70,7 @@ def generate_twitter_post(user_input):
         logging.error(f"خطأ في إنشاء تغريدة: {str(e)}")
         return None
 
-def generate_response(user_input, platform, max_retries=3):
+def generate_response(user_input, platform, dialect=None, max_retries=None):
     platform_config = {
         "تويتر": {
             "generator": generate_twitter_post,
@@ -112,6 +112,12 @@ def generate_response(user_input, platform, max_retries=3):
 
     if platform not in platform_config:
         return f"⚠️ المنصة غير مدعومة. الخيارات المتاحة: {', '.join(platform_config.keys())}"
+
+    # تأكد أن max_retries عدد صحيح
+    try:
+        max_retries = int(max_retries)
+    except (TypeError, ValueError):
+        max_retries = 3
 
     for attempt in range(max_retries):
         try:
