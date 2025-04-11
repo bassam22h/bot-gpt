@@ -60,7 +60,7 @@ async def setup_webhook(app):
     )
     logger.info(f"Webhook set to: {webhook_url}")
 
-async def run_bot():
+def main():
     app = ApplicationBuilder().token(TOKEN).build()
     
     # تسجيل المعالجات
@@ -71,16 +71,18 @@ async def run_bot():
 
     # تشغيل البوت
     if os.getenv("RENDER"):
-        await setup_webhook(app)
-        await app.run_webhook(
+        PORT = int(os.getenv("PORT", 8443))
+        WEBHOOK_URL = f"https://{os.getenv('RENDER_APP_NAME')}.onrender.com/{TOKEN}"
+        
+        # إعداد الويب هوك بشكل منفصل
+        app.run_webhook(
             listen="0.0.0.0",
-            port=int(os.getenv("PORT", 8443)),
-            secret_token=os.getenv("WEBHOOK_SECRET", ""),
-            webhook_url=f"https://{os.getenv('RENDER_APP_NAME')}.onrender.com/{TOKEN}"
+            port=PORT,
+            webhook_url=WEBHOOK_URL,
+            secret_token=os.getenv("WEBHOOK_SECRET", "")
         )
     else:
-        await app.run_polling()
+        app.run_polling()
 
 if __name__ == "__main__":
-    import asyncio
-    asyncio.run(run_bot())
+    main()
