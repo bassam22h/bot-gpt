@@ -58,6 +58,12 @@ async def event_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
     platform = context.user_data.get("platform")
     user_input = update.message.text
 
+    if not is_admin:
+        count = get_user_data(user_id).get("count", 0)
+        if count >= DAILY_LIMIT:
+            await update.message.reply_text("⚠️ لقد وصلت للحد الأقصى من الطلبات اليوم.")
+            return ConversationHandler.END
+
     msg = await update.message.reply_text("⏳ يتم إنشاء المنشور...")
 
     try:
@@ -73,14 +79,15 @@ async def event_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await context.bot.delete_message(chat_id=msg.chat.id, message_id=msg.message_id)
         await update.message.reply_text(result)
-        await update.message.reply_text(f"✅ تبقى لديك {remaining} من {DAILY_LIMIT} لهذا اليوم.")
+
+        if not is_admin:
+            if remaining == 0:
+                await update.message.reply_text("⚠️ لقد استنفدت جميع طلباتك لليوم.")
+            else:
+                await update.message.reply_text(f"✅ تبقى لديك {remaining} من {DAILY_LIMIT} لهذا اليوم.")
     except Exception as e:
         await context.bot.delete_message(chat_id=msg.chat.id, message_id=msg.message_id)
         await update.message.reply_text("⚠️ حدث خطأ أثناء إنشاء المنشور. حاول مجددًا.")
         raise e
 
-    return ConversationHandler.END
-
-async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("❌ تم إلغاء العملية.")
     return ConversationHandler.END
