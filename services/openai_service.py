@@ -14,7 +14,6 @@ logging.basicConfig(
     ]
 )
 
-# إعدادات API
 API_KEY = os.getenv('OPENROUTER_API_KEY')
 if not API_KEY:
     logging.error("OPENROUTER_API_KEY غير موجود في متغيرات البيئة")
@@ -30,17 +29,13 @@ client = OpenAI(
 def clean_content(text):
     if not text:
         return ""
-
     try:
         arabic_chars = r'[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]'
-        allowed_symbols = r'[#@_،؛:؟!ـ.، \n\-*]'
-        emojis = r'[\U0001F300-\U0001F5FF\U0001F600-\U0001F64F\U0001F680-\U0001F6FF\u2600-\u26FF\u2700-\u27BF]'
-        
-        cleaned = re.sub(fr'[^{arabic_chars}{allowed_symbols}{emojis}]', '', str(text))
-        cleaned = re.sub(r'\*+', '•', cleaned)
+        allowed_symbols = r'[!؟.,،؛:\n\-#@_ ]'
+        emojis = r'[\U0001F300-\U0001F6FF\u2600-\u26FF\u2700-\u27BF]'
+        cleaned = re.sub(fr'[^\n{arabic_chars}{allowed_symbols}{emojis}]', '', str(text))
         cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
         cleaned = re.sub(r'[ ]{2,}', ' ', cleaned)
-        
         return cleaned.strip()
     except Exception as e:
         logging.error(f"خطأ في تنظيف النص: {str(e)}")
@@ -56,16 +51,15 @@ def generate_twitter_post(user_input):
             model="meta-llama/llama-4-maverick:free",
             messages=[
                 {"role": "system", "content": """
-                    أنت كاتب محترف على تويتر.
-                    أنشئ تغريدة قصيرة وجذابة باللغة العربية الفصحى.
-                    - ابدأ بجملة افتتاحية ملفتة
-                    - قدم فكرة واحدة رئيسية
-                    - استخدم هاشتاقات مرتبطة بالموضوع (2-3)
-                    - أضف إيموجي إن أمكن
-                    - لا تستخدم ترقيم أو تعليمات
-                    - لا تكتب تنبيهات أو مقدمات مثل (إليك - هذه تغريدة - إلخ)
-                """},
-                {"role": "user", "content": f"{user_input}"}
+أنت خبير محتوى عربي على تويتر.
+- أنشئ تغريدة جذابة حول الفكرة التالية.
+- استخدم أسلوبًا بسيطًا غير رسمي.
+- لا تكرر الصياغات الشائعة.
+- أضف 2-3 هاشتاقات مناسبة.
+- استخدم إيموجي معبّرة.
+- لا تذكر "في هذه التغريدة" أو "إليك".
+"""},
+                {"role": "user", "content": user_input}
             ],
             temperature=0.7,
             max_tokens=300,
@@ -80,39 +74,36 @@ def generate_response(user_input, platform, max_retries=3):
     platform_config = {
         "تويتر": {
             "generator": generate_twitter_post,
-            "emojis": ["🚀", "💡", "✨", "🌱", "🔥"],
-            "retry_delay": 2
+            "emojis": ["🔥", "💡", "🚀", "✨", "🎯"],
         },
         "لينكدإن": {
             "model": "meta-llama/llama-4-maverick:free",
             "max_tokens": 600,
             "template": """
-أنت خبير في إنشاء منشورات مهنية باللغة العربية على لينكدإن.
-أنشئ منشورًا يسلّط الضوء على "{input}" بطريقة احترافية، تشمل:
-- فكرة أساسية واضحة
-- ثلاث نقاط داعمة أو خطوات تطبيقية
-- لمسة تحفيزية في الختام
-- استخدام هاشتاقات مثل: {hashtags}
-- إدراج بعض الإيموجي المناسبة
+أنت كاتب محتوى محترف لمنصة لينكدإن.
+أنشئ منشورًا جذابًا ومهنيًا يتحدث عن: "{input}"
+- اجعل الفكرة الأساسية واضحة من البداية
+- أضف ثلاث نقاط أو خطوات عملية
+- أنهِ المنشور برسالة ملهمة أو نصيحة واقعية
+- استخدم أسلوبًا بسيطًا لكنه راقٍ
+- أضف بعض الإيموجي المناسبة و3 هاشتاقات مثل: {hashtags}
 """,
-            "emojis": ["🚀", "💼", "📈", "👥", "🏆"],
-            "hashtags": "#تطوير_المهارات #ريادة_الأعمال #النمو_المهني",
-            "retry_delay": 3
+            "emojis": ["💼", "📈", "🏆", "🔍", "🚀"],
+            "hashtags": "#تطوير_مهني #ريادة_أعمال #نصائح_وظيفية"
         },
         "إنستغرام": {
             "model": "meta-llama/llama-4-maverick:free",
-            "max_tokens": 400,
+            "max_tokens": 450,
             "template": """
-أنت صانع محتوى بصري لإنستغرام.
-أنشئ منشورًا مميزًا حول "{input}":
-- بأسلوب ملهم أو تحفيزي
-- يحتوي على فقرات قصيرة أو نقاط جذابة
-- يشمل رموز تعبيرية جميلة
-- وينتهي بهاشتاقات مثل: {hashtags}
+أنت صانع محتوى إنستغرام.
+اكتب منشورًا مميزًا بأسلوب تحفيزي أو عاطفي حول: "{input}"
+- اجعل الأسلوب مشوقًا وعاطفيًا
+- استخدم جمل قصيرة أو تنسيقات نقطية
+- أضف إيموجي جذابة بكثرة
+- ضع في النهاية 3-4 هاشتاقات مثل: {hashtags}
 """,
-            "emojis": ["📸", "❤️", "✨", "🌸", "🌟"],
-            "hashtags": "#إبداع #تصوير #تطوير_ذات",
-            "retry_delay": 3
+            "emojis": ["❤️", "🌟", "📸", "💫", "🌈"],
+            "hashtags": "#الهام #ابداع #تطوير_الذات #حب_الحياة"
         }
     }
 
@@ -125,50 +116,48 @@ def generate_response(user_input, platform, max_retries=3):
     for attempt in range(max_retries):
         try:
             logging.info(f"جاري إنشاء منشور لـ {platform} - المحاولة {attempt + 1}")
-            
+
             if platform == "تويتر":
                 content = platform_config[platform]["generator"](user_input)
                 if not content:
                     raise ValueError("فشل إنشاء التغريدة")
             else:
+                cfg = platform_config[platform]
+                system_prompt = cfg["template"].format(
+                    input=user_input,
+                    hashtags=cfg["hashtags"]
+                )
+
+                user_prompt = f"أنشئ منشورًا إبداعيًا. استخدم هذه الإيموجي: {', '.join(random.sample(cfg['emojis'], 3))}"
+
                 response = client.chat.completions.create(
                     extra_headers={
                         "HTTP-Referer": SITE_URL,
                         "X-Title": SITE_NAME,
                     },
-                    model=platform_config[platform]["model"],
+                    model=cfg["model"],
                     messages=[
-                        {
-                            "role": "system",
-                            "content": platform_config[platform]["template"].format(
-                                input=user_input,
-                                hashtags=platform_config[platform]["hashtags"]
-                            )
-                        },
-                        {
-                            "role": "user",
-                            "content": f"أنشئ منشورًا عن: {user_input}\nاستخدم هذه الإيموجيز: {', '.join(platform_config[platform]['emojis'][:3])}"
-                        }
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
                     ],
-                    temperature=0.7,
-                    max_tokens=platform_config[platform]["max_tokens"],
+                    temperature=0.75,
+                    max_tokens=cfg["max_tokens"],
                     timeout=30.0
                 )
                 content = response.choices[0].message.content
 
-            cleaned_content = clean_content(content)
-            if not cleaned_content or len(cleaned_content) < 50:
-                raise ValueError("المحتوى الناتج غير كافٍ")
+            cleaned = clean_content(content)
+            if not cleaned or len(cleaned) < 50:
+                raise ValueError("النص الناتج غير كافٍ")
 
-            selected_emojis = platform_config[platform]["emojis"]
-            if not any(emoji in cleaned_content for emoji in selected_emojis):
-                cleaned_content = f"{random.choice(selected_emojis)} {cleaned_content}"
+            if not any(emoji in cleaned for emoji in platform_config[platform]["emojis"]):
+                cleaned = f"{random.choice(platform_config[platform]['emojis'])} {cleaned}"
 
             logging.info("تم إنشاء المنشور بنجاح")
-            return cleaned_content
+            return cleaned
 
         except Exception as e:
             logging.error(f"خطأ في المحاولة {attempt + 1}: {str(e)}")
             continue
 
-    return "⚠️ فشل إنشاء المنشور. يرجى:\n- التحقق من اتصال الإنترنت\n- تعديل النص المدخل\n- المحاولة لاحقًا"
+    return "⚠️ فشل إنشاء المنشور. يرجى:\n- التأكد من الاتصال\n- المحاولة لاحقًا"
