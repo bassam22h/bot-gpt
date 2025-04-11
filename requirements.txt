@@ -1,4 +1,5 @@
 python-telegram-bot[webhooks]==20.3
-   firebase-admin==6.5.0
-   python-dotenv==1.0.0
-   cachetools==5.3.1
+firebase-admin==6.5.0
+python-dotenv==1.0.0
+openai==1.12.0  # أضف هذا السطر
+cachetools==5.3.1
