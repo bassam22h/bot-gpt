@@ -83,6 +83,10 @@ async def event_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
     dialect = context.user_data.get("dialect")
     user_input = update.message.text
 
+    if not platform or not dialect:
+        await update.message.reply_text("⚠️ حدث خطأ في تحديد المنصة أو اللهجة. يرجى البدء من جديد.")
+        return ConversationHandler.END
+
     if not is_admin:
         if has_reached_limit(user_id, DAILY_LIMIT):
             await update.message.reply_text("⚠️ لقد وصلت للحد الأقصى من الطلبات اليوم.")
