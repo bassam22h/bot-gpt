@@ -7,9 +7,13 @@ from utils import (
     get_user_data, log_post, has_reached_limit
 )
 
-PLATFORM_CHOICE, EVENT_DETAILS = range(2)
+PLATFORM_CHOICE, DIALECT_CHOICE, EVENT_DETAILS = range(3)
 
 SUPPORTED_PLATFORMS = ["تويتر", "لينكدإن", "إنستغرام"]
+SUPPORTED_DIALECTS = [
+    "الفصحى المبسطة", "اليمنية", "الخليجية",
+    "المصرية", "الشامية", "المغربية"
+]
 DAILY_LIMIT = 5
 
 ADMIN_IDS = [int(i) for i in os.getenv("ADMIN_IDS", "").split(",") if i.strip().isdigit()]
@@ -49,6 +53,25 @@ async def platform_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return PLATFORM_CHOICE
 
     context.user_data["platform"] = platform
+    await update.message.reply_text(
+        "🗣️ اختر اللهجة التي تريد استخدامهـا:",
+        reply_markup=ReplyKeyboardMarkup(
+            [SUPPORTED_DIALECTS[i:i+2] for i in range(0, len(SUPPORTED_DIALECTS), 2)],
+            one_time_keyboard=True,
+            resize_keyboard=True
+        )
+    )
+    return DIALECT_CHOICE
+
+@require_subscription
+async def dialect_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    dialect = update.message.text
+
+    if dialect not in SUPPORTED_DIALECTS:
+        await update.message.reply_text("⚠️ اختر اللهجة من الأزرار الظاهرة.")
+        return DIALECT_CHOICE
+
+    context.user_data["dialect"] = dialect
     await update.message.reply_text("✍️ أرسل الآن فكرة المنشور أو نصه:")
     return EVENT_DETAILS
 
@@ -57,6 +80,7 @@ async def event_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     is_admin = user_id in ADMIN_IDS
     platform = context.user_data.get("platform")
+    dialect = context.user_data.get("dialect")
     user_input = update.message.text
 
     if not is_admin:
@@ -72,7 +96,7 @@ async def event_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = await update.message.reply_text("⏳ يتم إنشاء المنشور...")
 
     try:
-        result = generate_response(user_input, platform)
+        result = generate_response(user_input, platform, dialect)
         log_post(user_id, platform, result)
 
         await context.bot.delete_message(chat_id=msg.chat.id, message_id=msg.message_id)
