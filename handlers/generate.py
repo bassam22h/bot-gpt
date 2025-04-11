@@ -3,8 +3,8 @@ from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
 from services.openai_service import generate_response
 from utils import (
-    get_user_limit_status, increment_user_count,
-    require_subscription, get_user_data, log_post
+    increment_user_count, require_subscription,
+    get_user_data, log_post
 )
 
 PLATFORM_CHOICE, EVENT_DETAILS = range(2)
@@ -22,11 +22,11 @@ async def generate_post_handler(update: Update, context: ContextTypes.DEFAULT_TY
 
     if not is_admin:
         count = get_user_data(user_id).get("count", 0)
-        if count >= DAILY_LIMIT:
+        remaining = max(0, DAILY_LIMIT - count)
+        if remaining == 0:
             await update.message.reply_text("⚠️ لقد وصلت للحد الأقصى من الطلبات اليوم.")
             return ConversationHandler.END
 
-        remaining = DAILY_LIMIT - count
         await update.message.reply_text(
             f"📱 اختر المنصة:\n\nلديك {remaining} من {DAILY_LIMIT} طلبات متبقية اليوم.",
             reply_markup=ReplyKeyboardMarkup([SUPPORTED_PLATFORMS], one_time_keyboard=True, resize_keyboard=True)
@@ -59,22 +59,28 @@ async def event_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_input = update.message.text
 
     if not is_admin:
-        count = get_user_data(user_id).get("count", 0)
+        data = get_user_data(user_id)
+        count = data.get("count", 0)
+        date = data.get("date")
+
+        from datetime import datetime
+        today = datetime.now().strftime("%Y-%m-%d")
+        if date != today:
+            count = 0  # إعادة التعيين لليوم الجديد
+
         if count >= DAILY_LIMIT:
             await update.message.reply_text("⚠️ لقد وصلت للحد الأقصى من الطلبات اليوم.")
             return ConversationHandler.END
+
+        increment_user_count(user_id)
+        remaining = max(0, DAILY_LIMIT - (count + 1))
+    else:
+        remaining = "غير محدود"
 
     msg = await update.message.reply_text("⏳ يتم إنشاء المنشور...")
 
     try:
         result = generate_response(user_input, platform)
-
-        if not is_admin:
-            increment_user_count(user_id)
-            remaining = max(0, DAILY_LIMIT - get_user_data(user_id).get("count", 0))
-        else:
-            remaining = "غير محدود"
-
         log_post(user_id, platform, result)
 
         await context.bot.delete_message(chat_id=msg.chat.id, message_id=msg.message_id)
