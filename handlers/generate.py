@@ -7,6 +7,8 @@ from utils import (
     get_user_data, log_post
 )
 
+from datetime import datetime
+
 PLATFORM_CHOICE, EVENT_DETAILS = range(2)
 
 SUPPORTED_PLATFORMS = ["تويتر", "لينكدإن", "إنستغرام"]
@@ -21,7 +23,8 @@ async def generate_post_handler(update: Update, context: ContextTypes.DEFAULT_TY
     is_admin = user_id in ADMIN_IDS
 
     if not is_admin:
-        count = get_user_data(user_id).get("count", 0)
+        user_data = await get_user_data(user_id)
+        count = user_data.get("count", 0)
         remaining = max(0, DAILY_LIMIT - count)
         if remaining == 0:
             await update.message.reply_text("⚠️ لقد وصلت للحد الأقصى من الطلبات اليوم.")
@@ -59,12 +62,11 @@ async def event_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_input = update.message.text
 
     if not is_admin:
-        data = get_user_data(user_id)
+        data = await get_user_data(user_id)
         count = data.get("count", 0)
         date = data.get("date")
+        today = datetime.utcnow().strftime("%Y-%m-%d")
 
-        from datetime import datetime
-        today = datetime.now().strftime("%Y-%m-%d")
         if date != today:
             count = 0  # إعادة التعيين لليوم الجديد
 
@@ -72,7 +74,7 @@ async def event_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("⚠️ لقد وصلت للحد الأقصى من الطلبات اليوم.")
             return ConversationHandler.END
 
-        increment_user_count(user_id)
+        await increment_user_count(user_id)
         remaining = max(0, DAILY_LIMIT - (count + 1))
     else:
         remaining = "غير محدود"
@@ -81,7 +83,7 @@ async def event_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         result = generate_response(user_input, platform)
-        log_post(user_id, platform, result)
+        await log_post(user_id, platform, result)
 
         await context.bot.delete_message(chat_id=msg.chat.id, message_id=msg.message_id)
         await update.message.reply_text(result)
