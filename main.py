@@ -47,7 +47,7 @@ def setup_handlers(app):
     app.add_handler(MessageHandler(filters.TEXT & filters.User(ADMIN_IDS), receive_broadcast_message))
 
 def main():
-    app = ApplicationBuilder().token(TOKEN).webhook_path(f"/{TOKEN}").build()
+    app = ApplicationBuilder().token(TOKEN).build()
     setup_handlers(app)
     app.add_error_handler(error_handler)
 
@@ -56,7 +56,8 @@ def main():
             listen="0.0.0.0",
             port=int(os.getenv("PORT", 8443)),
             webhook_url=f"https://{os.getenv('RENDER_APP_NAME')}.onrender.com/{TOKEN}",
-            secret_token=os.getenv("WEBHOOK_SECRET", "")
+            secret_token=os.getenv("WEBHOOK_SECRET", ""),
+            path=f"/{TOKEN}"
         )
     else:
         app.run_polling()
