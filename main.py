@@ -9,7 +9,7 @@ from config import TOKEN, ADMIN_IDS
 from handlers.start import start_handler, check_subscription_callback
 from handlers.generate import (
     generate_post_handler, platform_choice, event_details,
-    cancel, PLATFORM_CHOICE, EVENT_DETAILS, DIALECT_CHOICE
+    cancel, PLATFORM_CHOICE, EVENT_DETAILS, DIALECT_CHOICE, dialect_choice
 )
 from handlers.admin import (
     admin_panel, handle_admin_actions, receive_broadcast_message
@@ -35,8 +35,8 @@ def setup_handlers(app):
         entry_points=[CommandHandler("generate", generate_post_handler)],
         states={
             PLATFORM_CHOICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, platform_choice)],
+            DIALECT_CHOICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, dialect_choice)],
             EVENT_DETAILS: [MessageHandler(filters.TEXT & ~filters.COMMAND, event_details)],
-            DIALECT_CHOICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, event_details)],  # نفس الدالة المستخدمة حالياً
         },
         fallbacks=[CommandHandler("cancel", cancel)],
         allow_reentry=True
