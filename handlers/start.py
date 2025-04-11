@@ -6,7 +6,6 @@ from datetime import datetime, date
 import logging
 from telegram.constants import ParseMode
 
-# إعداد المسجل (logger)
 logger = logging.getLogger(__name__)
 clean_channel_username = CHANNEL_USERNAME.replace("@", "")
 
@@ -14,7 +13,6 @@ def escape_markdown(text):
     escape_chars = r'_*[]()~`>#+-=|{}.!'
     return ''.join(f'\\{char}' if char in escape_chars else char for char in text)
 
-# دالة التحقق من الاشتراك
 async def check_subscription(update: Update, context: CallbackContext) -> bool:
     user = update.effective_user
     try:
@@ -27,7 +25,6 @@ async def check_subscription(update: Update, context: CallbackContext) -> bool:
         logger.error(f"Subscription check failed for {user.id}: {e}")
         return False
 
-# رسالة الانضمام للقناة
 async def send_subscription_prompt(update: Update, context: CallbackContext):
     keyboard = InlineKeyboardMarkup([
         [
@@ -37,10 +34,10 @@ async def send_subscription_prompt(update: Update, context: CallbackContext):
     ])
     
     welcome_msg = (
-        "👋 *مرحبًا بك في بوت المنشورات الذكية\!*\n\n"
-        f"🔒 للوصول الكامل للميزات، يرجى الاشتراك في قناتنا:\n"
-        f"https://t\.me/{clean_channel_username}\n\n"
-        "بعد الاشتراك، اضغط على زر *تحقق من الاشتراك*"
+        "👋 *مرحبًا بك في بوت المنشورات الذكية\\!*\n\n"
+        f"🔒 للاستخدام الكامل، اشترك في قناتنا:\n"
+        f"https://t.me/{clean_channel_username}\n\n"
+        "بعد الاشتراك، اضغط *تحقق من الاشتراك*"
     )
     
     await update.message.reply_text(
@@ -50,7 +47,6 @@ async def send_subscription_prompt(update: Update, context: CallbackContext):
         disable_web_page_preview=True
     )
 
-# التحقق من الاشتراك من الزر
 async def check_subscription_callback(update: Update, context: CallbackContext):
     query = update.callback_query
     await query.answer()
@@ -58,10 +54,10 @@ async def check_subscription_callback(update: Update, context: CallbackContext):
     try:
         if await check_subscription(update, context):
             success_msg = (
-                "🎉 *تم التحقق بنجاح\!*\n\n"
+                "🎉 *تم التحقق بنجاح\\!*\n\n"
                 "يمكنك الآن استخدام جميع ميزات البوت:\n"
-                "📝 /generate \- لإنشاء منشور جديد\n"
-                "👨‍💻 /admin \- لوحة التحكم (للمشرفين)"
+                "📝 /generate \\- لإنشاء منشور جديد\n"
+                "👨‍💻 /admin \\- لوحة التحكم للمشرفين"
             )
             await query.edit_message_text(
                 success_msg,
@@ -70,19 +66,18 @@ async def check_subscription_callback(update: Update, context: CallbackContext):
         else:
             await query.edit_message_text(
                 "❌ *لم يتم التحقق من اشتراكك*\n\n"
-                "1\. تأكد من الانضمام للقناة\n"
-                "2\. اضغط على زر التحقق مرة أخرى\n"
-                "3\. إذا استمرت المشكلة، حاول /start",
+                "1\\. تأكد من الانضمام للقناة\n"
+                "2\\. اضغط على زر التحقق مرة أخرى\n"
+                "3\\. إذا استمرت المشكلة، أعد استخدام /start",
                 parse_mode=ParseMode.MARKDOWN_V2
             )
     except Exception as e:
         logger.error(f"Subscription callback failed: {e}")
         await query.edit_message_text(
-            "⚠️ حدث خطأ أثناء التحقق\. الرجاء المحاولة لاحقًا\.",
+            "⚠️ حدث خطأ أثناء التحقق\\. حاول لاحقًا\\.",
             parse_mode=ParseMode.MARKDOWN_V2
         )
 
-# معالجة أمر /start
 async def start_handler(update: Update, context: CallbackContext):
     user = update.effective_user
     user_id = str(user.id)
@@ -92,14 +87,12 @@ async def start_handler(update: Update, context: CallbackContext):
         user_data = ref.get()
 
         if user_data:
-            # المستخدم موجود - لا نعيد تعيين count أو التاريخ
             ref.update({
                 "name": user.first_name or "",
                 "username": user.username or "",
                 "last_active": datetime.utcnow().isoformat()
             })
         else:
-            # مستخدم جديد
             today = date.today().strftime("%Y-%m-%d")
             ref.set({
                 "name": user.first_name or "",
@@ -113,18 +106,17 @@ async def start_handler(update: Update, context: CallbackContext):
     except Exception as e:
         logger.error(f"Failed to register/update user {user_id}: {e}")
 
-    # التحقق من الاشتراك
     try:
         if not await check_subscription(update, context):
             await send_subscription_prompt(update, context)
             return
 
         welcome_msg = (
-            f"👋 *أهلاً بعودتك، {escape_markdown(user.first_name)}\!*\n\n"
+            f"👋 *أهلاً بعودتك، {escape_markdown(user.first_name)}\\!*\n\n"
             "🎯 *اختر أحد الخيارات:*\n"
-            "📝 /generate \- إنشاء منشور جديد\n"
-            "ℹ️ /help \- عرض التعليمات\n"
-            "👨‍💻 /admin \- لوحة التحكم للمشرفين\n\n"
+            "📝 /generate \\- إنشاء منشور جديد\n"
+            "ℹ️ /help \\- عرض التعليمات\n"
+            "👨‍💻 /admin \\- لوحة التحكم للمشرفين\n\n"
             "🛠️ البوت يدعم إنشاء منشورات لتويتر، لينكدإن وإنستغرام"
         )
         
@@ -139,6 +131,6 @@ async def start_handler(update: Update, context: CallbackContext):
     except Exception as e:
         logger.error(f"Start handler failed for {user.id}: {e}")
         await update.message.reply_text(
-            "⚠️ حدث خطأ أثناء تحميل البيانات\. الرجاء المحاولة لاحقًا\.",
+            "⚠️ حدث خطأ أثناء تحميل البيانات\\. الرجاء المحاولة لاحقًا\\.",
             parse_mode=ParseMode.MARKDOWN_V2
         )
