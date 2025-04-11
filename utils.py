@@ -94,7 +94,6 @@ def get_user_limit_status(user_id: int, limit: int = 5) -> bool:
         return False
 
 def has_reached_limit(user_id: int, limit: int = 5) -> bool:
-    """هل المستخدم تجاوز الحد اليومي"""
     return not get_user_limit_status(user_id, limit)
 
 def increment_user_count(user_id: int):
@@ -104,16 +103,18 @@ def increment_user_count(user_id: int):
         current_date = str(date.today())
 
         if current_data.get("date") != current_date:
-            user_ref.update({
+            new_data = {
                 "count": 1,
                 "date": current_date,
                 "last_active": str(datetime.utcnow())
-            })
+            }
         else:
-            user_ref.update({
-                "count": db.Increment(1),
+            new_data = {
+                "count": current_data.get("count", 0) + 1,
                 "last_active": str(datetime.utcnow())
-            })
+            }
+
+        user_ref.update(new_data)
     except Exception as e:
         logger.error(f"Error incrementing user count: {e}")
 
