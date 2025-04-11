@@ -102,13 +102,24 @@ def get_user_limit_status(user_id: int, limit: int = 5) -> bool:
         return False
 
 def increment_user_count(user_id: int):
-    """زيادة عداد استخدامات المستخدم"""
+    """زيادة عداد استخدامات المستخدم مع التحقق من التاريخ"""
     try:
         user_ref = db.reference(f"/users/{user_id}")
-        user_ref.update({
-            "count": firebase_admin.db.Increment(1),
-            "last_active": str(datetime.utcnow())
-        })
+        current_data = user_ref.get() or {}
+        current_date = str(date.today())
+
+        if current_data.get("date") != current_date:
+            # إعادة تعيين العداد إذا كان التاريخ قديم
+            user_ref.update({
+                "count": 1,
+                "date": current_date,
+                "last_active": str(datetime.utcnow())
+            })
+        else:
+            user_ref.update({
+                "count": firebase_admin.db.Increment(1),
+                "last_active": str(datetime.utcnow())
+            })
     except Exception as e:
         logger.error(f"Error incrementing user count: {e}")
 
