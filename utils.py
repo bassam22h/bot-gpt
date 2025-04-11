@@ -21,7 +21,7 @@ def initialize_firebase():
                 'databaseURL': os.getenv("FIREBASE_DB_URL")
             })
         except Exception as e:
-            logger.error(f"فشل تهيئة Firebase: {e}")
+            logger.error(f"Firebase initialization failed: {e}")
             raise
 
 initialize_firebase()
@@ -38,7 +38,7 @@ async def is_user_subscribed(user_id: int, context: ContextTypes.DEFAULT_TYPE) -
         member = await context.bot.get_chat_member(REQUIRED_CHANNEL, user_id)
         return member.status in ["member", "creator", "administrator"]
     except Exception as e:
-        logger.error(f"فشل التحقق من الاشتراك: {e}")
+        logger.error(f"Subscription check failed: {e}")
         return False
 
 def require_subscription(func):
@@ -58,13 +58,21 @@ def require_subscription(func):
                 return
             return await func(update, context, *args, **kwargs)
         except Exception as e:
-            logger.error(f"خطأ في ديكوراتور الاشتراك: {e}")
+            logger.error(f"Subscription decorator error: {e}")
             await update.message.reply_text("⚠️ حدث خطأ أثناء التحقق من الاشتراك")
     return wrapper
 
 # ============= دوال المستخدمين =============
+def get_all_users() -> dict:
+    """جلب جميع المستخدمين"""
+    try:
+        return db.reference("/users").get() or {}
+    except Exception as e:
+        logger.error(f"Error getting all users: {e}")
+        return {}
+
 def get_user_data(user_id: int) -> dict:
-    """جلب بيانات المستخدم"""
+    """جلب بيانات مستخدم معين"""
     try:
         return db.reference(f"/users/{user_id}").get() or {
             "count": 0,
@@ -74,7 +82,7 @@ def get_user_data(user_id: int) -> dict:
             "last_active": str(datetime.utcnow())
         }
     except Exception as e:
-        logger.error(f"خطأ في جلب بيانات المستخدم {user_id}: {e}")
+        logger.error(f"Error getting user data: {e}")
         return {"count": 0}
 
 def save_user_data(user_id: int, data: dict):
@@ -82,7 +90,7 @@ def save_user_data(user_id: int, data: dict):
     try:
         db.reference(f"/users/{user_id}").set(data)
     except Exception as e:
-        logger.error(f"خطأ في حفظ بيانات المستخدم {user_id}: {e}")
+        logger.error(f"Error saving user data: {e}")
 
 def get_user_limit_status(user_id: int, limit: int = 5) -> bool:
     """التحقق من عدم تجاوز الحد اليومي"""
@@ -90,7 +98,7 @@ def get_user_limit_status(user_id: int, limit: int = 5) -> bool:
         user_data = get_user_data(user_id)
         return user_data.get("count", 0) < limit
     except Exception as e:
-        logger.error(f"خطأ في التحقق من الحد {user_id}: {e}")
+        logger.error(f"Error checking user limit: {e}")
         return False
 
 def increment_user_count(user_id: int):
@@ -102,11 +110,19 @@ def increment_user_count(user_id: int):
             "last_active": str(datetime.utcnow())
         })
     except Exception as e:
-        logger.error(f"خطأ في زيادة العداد {user_id}: {e}")
+        logger.error(f"Error incrementing user count: {e}")
 
 # ============= دوال المنشورات =============
+def get_all_logs() -> dict:
+    """جلب جميع سجلات المنشورات"""
+    try:
+        return db.reference("/logs").get() or {}
+    except Exception as e:
+        logger.error(f"Error getting all logs: {e}")
+        return {}
+
 def log_post(user_id: int, platform: str, content: str):
-    """تسجيل المنشور في السجلات"""
+    """تسجيل منشور جديد"""
     try:
         post_ref = db.reference(f"/logs/{user_id}").push()
         post_ref.set({
@@ -115,15 +131,7 @@ def log_post(user_id: int, platform: str, content: str):
             "timestamp": datetime.utcnow().isoformat()
         })
     except Exception as e:
-        logger.error(f"خطأ في تسجيل المنشور {user_id}: {e}")
-
-def get_all_logs() -> dict:
-    """جلب جميع سجلات المنشورات"""
-    try:
-        return db.reference("/logs").get() or {}
-    except Exception as e:
-        logger.error(f"خطأ في جلب السجلات: {e}")
-        return {}
+        logger.error(f"Error logging post: {e}")
 
 # ============= دوال الإحصائيات =============
 def get_platform_usage(limit: int = 5) -> list:
@@ -140,37 +148,37 @@ def get_platform_usage(limit: int = 5) -> list:
 
         return Counter(platforms).most_common(limit) if platforms else []
     except Exception as e:
-        logger.error(f"خطأ في جلب إحصائيات المنصات: {e}")
+        logger.error(f"Error getting platform usage: {e}")
         return []
 
+def get_daily_new_users() -> int:
+    """عدد المستخدمين الجدد اليوم"""
+    try:
+        users = get_all_users()
+        today = str(date.today())
+        return sum(1 for u in users.values() if u.get('date') == today)
+    except Exception as e:
+        logger.error(f"Error getting daily new users: {e}")
+        return 0
+
+# ============= دوال الإدارة =============
 def reset_user_counts():
-    """تصفير جميع العدادات"""
+    """تصفير جميع عدادات المستخدمين"""
     try:
         users_ref = db.reference("/users")
         users = users_ref.get() or {}
         updates = {f"{uid}/count": 0 for uid in users}
         users_ref.update(updates)
-        logger.info("تم تصفير العدادات بنجاح")
+        logger.info("User counts reset successfully")
     except Exception as e:
-        logger.error(f"خطأ في تصفير العدادات: {e}")
+        logger.error(f"Error resetting user counts: {e}")
         raise
 
 def clear_all_logs():
-    """حذف جميع السجلات"""
+    """حذف جميع سجلات المنشورات"""
     try:
         db.reference("/logs").delete()
-        logger.info("تم حذف السجلات بنجاح")
+        logger.info("All logs cleared successfully")
     except Exception as e:
-        logger.error(f"خطأ في حذف السجلات: {e}")
+        logger.error(f"Error clearing logs: {e}")
         raise
-
-# ============= دوال أخرى =============
-def get_daily_new_users() -> int:
-    """عدد المستخدمين الجدد اليوم"""
-    try:
-        users = db.reference("/users").get() or {}
-        today = str(date.today())
-        return sum(1 for u in users.values() if u.get('date') == today)
-    except Exception as e:
-        logger.error(f"خطأ في جلب المستخدمين الجدد: {e}")
-        return 0
