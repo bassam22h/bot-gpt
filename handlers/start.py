@@ -55,7 +55,7 @@ async def check_subscription_callback(update: Update, context: CallbackContext):
                 "🎉 *تم التحقق بنجاح\!*\n\n"
                 "يمكنك الآن استخدام جميع ميزات البوت:\n"
                 "📝 /generate \- لإنشاء منشور جديد\n"
-                "👨‍💻 /admin \- لوحة التحكم للمشرفين"
+                "👨‍💻 /admin \- لوحة التحكم (للمشرفين)"
             )
             await query.edit_message_text(
                 success_msg,
