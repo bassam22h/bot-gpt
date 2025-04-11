@@ -91,3 +91,7 @@ async def event_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
         raise e
 
     return ConversationHandler.END
+
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("❌ تم إلغاء العملية.")
+    return ConversationHandler.END
