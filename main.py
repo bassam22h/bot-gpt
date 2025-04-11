@@ -2,27 +2,17 @@ import logging
 import os
 from telegram import Update
 from telegram.ext import (
-    ApplicationBuilder,
-    CommandHandler,
-    CallbackQueryHandler,
-    MessageHandler,
-    ContextTypes,
-    filters,
-    ConversationHandler  # هذا ما كان ناقصًا
+    ApplicationBuilder, CommandHandler, CallbackQueryHandler,
+    MessageHandler, ContextTypes, filters, ConversationHandler
 )
 from config import TOKEN, ADMIN_IDS
 from handlers.start import start_handler, check_subscription_callback
 from handlers.generate import (
-    generate_post_handler,
-    platform_choice,
-    event_details,
-    cancel,
-    PLATFORM_CHOICE,
-    EVENT_DETAILS
+    generate_post_handler, platform_choice, 
+    event_details, cancel, PLATFORM_CHOICE, EVENT_DETAILS
 )
 from handlers.admin import (
-    admin_panel,
-    handle_admin_actions,
+    admin_panel, handle_admin_actions, 
     receive_broadcast_message
 )
 
@@ -60,7 +50,17 @@ def setup_handlers(app):
     app.add_handler(CallbackQueryHandler(handle_admin_actions, pattern="^(view_statistics|reset_counts_|clear_logs_|broadcast_)"))
     app.add_handler(MessageHandler(filters.TEXT & filters.User(ADMIN_IDS), receive_broadcast_message))
 
-def main():
+async def setup_webhook(app):
+    """إعداد وتفعيل الويب هوك"""
+    webhook_url = f"https://{os.getenv('RENDER_APP_NAME')}.onrender.com/{TOKEN}"
+    await app.bot.set_webhook(
+        url=webhook_url,
+        drop_pending_updates=True,
+        secret_token=os.getenv("WEBHOOK_SECRET", "")
+    )
+    logger.info(f"Webhook set to: {webhook_url}")
+
+async def run_bot():
     app = ApplicationBuilder().token(TOKEN).build()
     
     # تسجيل المعالجات
@@ -71,13 +71,16 @@ def main():
 
     # تشغيل البوت
     if os.getenv("RENDER"):
-        app.run_webhook(
+        await setup_webhook(app)
+        await app.run_webhook(
             listen="0.0.0.0",
             port=int(os.getenv("PORT", 8443)),
+            secret_token=os.getenv("WEBHOOK_SECRET", ""),
             webhook_url=f"https://{os.getenv('RENDER_APP_NAME')}.onrender.com/{TOKEN}"
         )
     else:
-        app.run_polling()
+        await app.run_polling()
 
 if __name__ == "__main__":
-    main()
+    import asyncio
+    asyncio.run(run_bot())
