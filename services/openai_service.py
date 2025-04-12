@@ -20,14 +20,17 @@ class OpenAIService:
     def __init__(self):
         self.client = self._initialize_client()
         self.dialect_guides = {
-            "المغربية": "استخدم: واخا، بزاف، دابا، خويا، زعما، مزيان",
+            "الفصحى المبسطة": "استخدم لغة عربية مبسطة وسهلة الفهم",
+            "اليمنية": "استخدم: عادك، شوف، معك خبر؟، شوية، قدك، تمام",
+            "الخليجية": "استخدم: بعد، زين، مره، عاد، وايد",
             "المصرية": "استخدم: خلاص، يعني، قوي، جامد، تمام، يلا",
-            "الخليجية": "استخدم: بعد، زين، مره، عاد، وايد"
+            "الشامية": "استخدم: هلّق، شو القصة، كتير، تمام، بالهداوة",
+            "المغربية": "استخدم: واخا، بزاف، دابا، خويا، زعما، مزيان"
         }
         self.emoji_sets = {
-            'twitter': ["🐦", "💬", "🔄", "❤️", "👏"],
-            'linkedin': ["💼", "📈", "🌐", "🤝", "🏆"],
-            'instagram': ["📸", "❤️", "👍", "😍", "🔥"]
+            'تويتر': ["🐦", "💬", "🔄", "❤️", "👏"],
+            'لينكدإن': ["💼", "📈", "🌐", "🤝", "🏆"],
+            'إنستغرام': ["📸", "❤️", "👍", "😍", "🔥"]
         }
 
     def _initialize_client(self) -> OpenAI:
@@ -59,34 +62,6 @@ class OpenAIService:
             logger.error(f"فشل تنظيف النص: {e}")
             return None
 
-    def _generate_content(
-        self,
-        prompt: str,
-        system_message: str,
-        max_tokens: int,
-        temperature: float = 0.7
-    ) -> Optional[str]:
-        try:
-            response = self.client.chat.completions.create(
-                extra_headers={
-                    "HTTP-Referer": os.getenv('SITE_URL', 'https://default.com'),
-                    "X-Title": os.getenv('SITE_NAME', 'Content Generator'),
-                },
-                extra_body={},
-                model="google/gemini-2.0-flash-thinking-exp:free",
-                messages=[
-                    {"role": "system", "content": system_message},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=temperature,
-                max_tokens=max_tokens,
-                timeout=30
-            )
-            return response.choices[0].message.content
-        except Exception as e:
-            logger.error(f"فشل إنشاء المحتوى: {e}")
-            return None
-
     def generate_response(
         self,
         user_input: str,
@@ -94,10 +69,10 @@ class OpenAIService:
         dialect: Optional[str] = None,
         max_retries: int = 3
     ) -> str:
-        """الدالة الرئيسية التي يمكن استيرادها من ملفات أخرى"""
+        """الدالة الرئيسية التي يتم استيرادها من ملف generate.py"""
         platform_config = {
             "تويتر": {
-                "template": "اكسب تغريدة عن: {topic}\n- الطول: 20-280 حرفًا\n- أضف 1-2 إيموجي\n{style}",
+                "template": "اكتب تغريدة عن: {topic}\n- الطول: 20-280 حرفًا\n- أضف 1-2 إيموجي\n{style}",
                 "max_tokens": 280,
                 "min_length": 20,
                 "temperature": 0.7
@@ -129,18 +104,29 @@ class OpenAIService:
                     style=style_note
                 )
                 
-                content = self._generate_content(
-                    prompt=f"أنشئ منشور {platform} عن: {user_input}",
-                    system_message=system_msg,
+                response = self.client.chat.completions.create(
+                    extra_headers={
+                        "HTTP-Referer": os.getenv('SITE_URL', 'https://default.com'),
+                        "X-Title": os.getenv('SITE_NAME', 'Content Generator'),
+                    },
+                    extra_body={},
+                    model="google/gemini-2.0-flash-thinking-exp:free",
+                    messages=[
+                        {"role": "system", "content": system_msg},
+                        {"role": "user", "content": f"أنشئ منشور {platform} عن: {user_input}"}
+                    ],
+                    temperature=config["temperature"],
                     max_tokens=config["max_tokens"],
-                    temperature=config["temperature"]
+                    timeout=30
                 )
                 
+                content = response.choices[0].message.content
                 cleaned = self._clean_content(content, config["min_length"])
+                
                 if cleaned:
                     # إضافة إيموجي إذا لم يكن موجودًا
-                    if not any(emoji in cleaned for emoji in self.emoji_sets[platform.lower()]):
-                        cleaned = f"{random.choice(self.emoji_sets[platform.lower()])} {cleaned}"
+                    if not any(emoji in cleaned for emoji in self.emoji_sets[platform]):
+                        cleaned = f"{random.choice(self.emoji_sets[platform])} {cleaned}"
                     return cleaned
                 
                 logger.warning(f"المحاولة {attempt + 1}: الناتج قصير أو غير صالح")
@@ -152,5 +138,6 @@ class OpenAIService:
 # إنشاء نسخة وحيدة من الخدمة
 openai_service = OpenAIService()
 
-# تصدير الدالة المطلوبة
-generate_response = openai_service.generate_response
+# تصدير الدالة المطلوبة للاستيراد
+def generate_response(user_input: str, platform: str, dialect: Optional[str] = None) -> str:
+    return openai_service.generate_response(user_input, platform, dialect)
