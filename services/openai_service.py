@@ -3,7 +3,7 @@ import logging
 import os
 import random
 from openai import OpenAI
-from typing import Optional
+from typing import Optional, Tuple
 
 logger = logging.getLogger('ArabicContentGenerator')
 
@@ -17,26 +17,25 @@ class OpenAIService:
         }
         self.min_lengths = {
             'تويتر': 50,
-            'لينكدإن': 200,  # زيادة الحد الأدنى لمنشورات لينكدإن
+            'لينكدإن': 200,
             'إنستغرام': 80
         }
 
     def _initialize_client(self) -> OpenAI:
         api_key = os.getenv('OPENROUTER_API_KEY')
         if not api_key:
-            raise ValueError("OPENROUTER_API_KEY is required")
+            logger.error("OPENROUTER_API_KEY غير موجود")
+            raise ValueError("API key is required")
         return OpenAI(base_url="https://openrouter.ai/api/v1", api_key=api_key)
 
-    def _clean_content(self, text: str, min_length: int) -> Optional[str]:
-        """تنظيف المحتوى مع ضمان الجودة"""
-        if not text or len(text.strip()) < min_length:
-            return None
-
-        # إزالة العبارات الشخصية مثل "يا صاحبي"
+    def _clean_content(self, text: str, min_length: int) -> Tuple[Optional[str], bool]:
+        """تنظيف المحتوى مع تقرير إذا كان فارغاً"""
+        if not text:
+            return None, True
+            
         text = re.sub(r'يَا?\s?[اأإآ]?[صش]اح?ب?ي?\b', '', text, flags=re.IGNORECASE)
         text = re.sub(r'\bخو?يَ?ا?\b', '', text, flags=re.IGNORECASE)
         
-        # تنظيف عام
         arabic_chars = r'[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]'
         symbols = r'[!؟.,،؛:\-\#@_()\d\s]'
         emojis = r'[\U0001F300-\U0001F6FF\u2600-\u26FF\u2700-\u27BF]'
@@ -45,10 +44,13 @@ class OpenAIService:
         cleaned = re.sub(f'[^{pattern}]', '', text)
         cleaned = re.sub(r'\s+', ' ', cleaned).strip()
         
-        return cleaned if len(cleaned) >= min_length else None
+        if len(cleaned) < min_length:
+            return None, False
+            
+        return cleaned, True
 
-    def _generate_content(self, prompt: str, system_msg: str, platform: str) -> Optional[str]:
-        """إنشاء المحتوى مع تحسينات للجودة"""
+    def _generate_safe_content(self, prompt: str, system_msg: str, platform: str) -> Optional[str]:
+        """إنشاء محتوى مع معالجة أخطاء شاملة"""
         try:
             response = self.client.chat.completions.create(
                 extra_headers={
@@ -60,72 +62,76 @@ class OpenAIService:
                 messages=[
                     {
                         "role": "system", 
-                        "content": system_msg + "\n- تجنب مخاطبة القارئ مباشرة بكلمات مثل 'يا صاحبي' أو 'خوي'"
+                        "content": system_msg + "\n- يجب أن يكون المحتوى كاملاً ومفيداً"
                     },
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.7,
                 max_tokens=800 if platform == 'لينكدإن' else 400,
-                timeout=45
+                timeout=60  # زيادة وقت الانتظار
             )
+            
+            if not response or not response.choices:
+                logger.error("الرد من API غير صالح أو فارغ")
+                return None
+                
             return response.choices[0].message.content
+            
         except Exception as e:
-            logger.error(f"Error generating content: {e}")
+            logger.error(f"خطأ في إنشاء المحتوى: {str(e)}")
             return None
 
     def generate_response(self, user_input: str, platform: str, dialect: Optional[str] = None) -> str:
-        """الدالة الرئيسية المعدلة"""
+        """الدالة الرئيسية مع ضمانات إضافية"""
+        if not user_input or not platform:
+            return "⚠️ المدخلات غير صالحة"
+            
         if platform not in self.emoji_sets:
-            return "⚠️ المنصة غير مدعومة"
+            return f"⚠️ المنصة غير مدعومة. الخيارات: {', '.join(self.emoji_sets.keys())}"
 
-        # تعليمات عامة لكل المنصات
-        system_template = """أنت كاتب محتوى محترف لـ {platform}. اكتب منشورًا عن:
-"{topic}"
-
-المتطلبات العامة:
-1. استخدم أسلوبًا احترافيًا راقيًا
-2. لا تخاطب القارئ مباشرة (تجنب "يا صاحبي" أو "خوي")
-3. المحتوى مفصل وغني بالمعلومات
-4. استخدم {emoji_count} إيموجي بشكل مناسب
-5. الطول الأدنى: {min_length} حرف"""
-
-        # تعليمات خاصة باللهجات
-        dialect_instructions = {
-            "اليمنية": "استخدم لهجة يمنية راقية دون مخاطبة مباشرة للقارئ. الكلمات المميزة: عادك، شوف، قدك، تمام، طيب، ابسر، صنديد، مواقف رجولية",
-            "المصرية": "استخدم لهجة مصرية راقية. الكلمات المميزة: خلاص، يعني، قوي، جامد، تمام، يلا، اهو، كده",
-            "الشامية": "استخدم لهجة شامية راقية. الكلمات المميزة: هلّق، شو القصة، كتير، منيح، بالهداوة",
-            "المغربية": "استخدم لهجة مغربية راقية. الكلمات المميزة: واخا، بزاف، دابا، زعما، مزيان، هاد",
-            "الخليجية": "استخدم لهجة خليجية راقية. الكلمات المميزة: بعد، زين، مره، عاد، وايد، على طاري",
-            "الفصحى المبسطة": "استخدم لغة عربية فصيحة مبسطة وسهلة الفهم"
+        dialect_guides = {
+            "اليمنية": "استخدم لهجة يمنية أصيلة بكلمات مثل: عادك، شوف، قدك، تمام، طيب، ابسر، صنديد",
+            "المصرية": "استخدم لهجة مصرية بكلمات مثل: خلاص، يعني، قوي، جامد، تمام، يلا، اهو",
+            "الشامية": "استخدم لهجة شامية بكلمات مثل: هلّق، شو القصة، كتير، منيح، بالهداوة",
+            "المغربية": "استخدم لهجة مغربية بكلمات مثل: واخا، بزاف، دابا، زعما، مزيان",
+            "الخليجية": "استخدم لهجة خليجية بكلمات مثل: بعد، زين، مره، عاد، وايد",
+            "الفصحى المبسطة": "استخدم لغة عربية فصيحة مبسطة"
         }
 
-        system_msg = system_template.format(
-            platform=platform,
-            topic=user_input,
-            emoji_count=2 if platform == 'تويتر' else 3,
-            min_length=self.min_lengths[platform]
-        )
+        system_msg = f"""أنت كاتب محتوى عربي محترف لـ {platform}. اكتب منشورًا عن:
+"{user_input}"
 
-        if dialect and dialect in dialect_instructions:
-            system_msg += f"\n\nمتطلبات اللهجة:\n{dialect_instructions[dialect]}"
+المتطلبات:
+1. المحتوى مفصل وغني بالمعلومات
+2. استخدم أسلوبًا {dialect_guides.get(dialect, 'احترافيًا')}
+3. الطول الأدنى: {self.min_lengths[platform]} حرف
+4. أضف {2 if platform == 'تويتر' else 3} إيموجي
+5. تجنب مخاطبة القارئ مباشرة"""
 
         for attempt in range(3):
-            content = self._generate_content(
-                prompt=f"أنشئ منشور {platform} عن: {user_input}",
-                system_msg=system_msg,
-                platform=platform
-            )
+            try:
+                content = self._generate_safe_content(
+                    prompt=f"أنشئ منشور {platform} عن: {user_input}",
+                    system_msg=system_msg,
+                    platform=platform
+                )
+                
+                if not content:
+                    continue
+                    
+                cleaned, is_valid = self._clean_content(content, self.min_lengths[platform])
+                
+                if is_valid and cleaned:
+                    if not any(emoji in cleaned for emoji in self.emoji_sets[platform]):
+                        cleaned = f"{random.choice(self.emoji_sets[platform])} {cleaned}"
+                    return cleaned
+                    
+                logger.warning(f"المحاولة {attempt + 1}: المحتوى غير صالح - الطول: {len(content) if content else 0}")
+                
+            except Exception as e:
+                logger.error(f"المحاولة {attempt + 1} فشلت: {str(e)}")
 
-            cleaned = self._clean_content(content, self.min_lengths[platform])
-            if cleaned:
-                # إضافة إيموجي إذا لم يكن موجودًا
-                if not any(emoji in cleaned for emoji in self.emoji_sets[platform]):
-                    cleaned = f"{random.choice(self.emoji_sets[platform])} {cleaned}"
-                return cleaned
-
-            logger.warning(f"المحاولة {attempt + 1}: المحتوى قصير أو غير صالح")
-
-        return "⚠️ تعذر إنشاء محتوى يلبي متطلبات الجودة. يرجى المحاولة مرة أخرى"
+        return "⚠️ فشل إنشاء محتوى يلبي المتطلبات. يرجى تعديل المدخلات والمحاولة مرة أخرى"
 
 # تصدير الدالة
 openai_service = OpenAIService()
