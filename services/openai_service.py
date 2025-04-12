@@ -2,7 +2,7 @@ import re
 import logging
 import os
 import random
-from openai import OpenAI
+from openrouter import OpenRouter
 
 # إعدادات التسجيل
 logging.basicConfig(
@@ -21,7 +21,7 @@ if not API_KEY:
 SITE_URL = os.getenv('SITE_URL', 'https://your-site.com')
 SITE_NAME = os.getenv('SITE_NAME', 'My Bot')
 
-client = OpenAI(
+client = OpenRouter(
     base_url="https://openrouter.ai/api/v1",
     api_key=API_KEY,
 )
