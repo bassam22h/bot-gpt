@@ -2,7 +2,8 @@ import re
 import logging
 import os
 import random
-from openai import OpenAI
+import time
+from openai import OpenAI, APIError
 from typing import Optional, Tuple
 
 logger = logging.getLogger('ArabicContentGenerator')
@@ -20,22 +21,41 @@ class OpenAIService:
             'لينكدإن': 200,
             'إنستغرام': 80
         }
+        self.max_attempts = 3
+        self.timeout = 60
 
     def _initialize_client(self) -> OpenAI:
+        """تهيئة العميل مع التحقق من المفتاح"""
         api_key = os.getenv('OPENROUTER_API_KEY')
         if not api_key:
-            logger.error("OPENROUTER_API_KEY غير موجود")
+            logger.critical("OPENROUTER_API_KEY غير موجود في متغيرات البيئة")
             raise ValueError("API key is required")
-        return OpenAI(base_url="https://openrouter.ai/api/v1", api_key=api_key)
+        
+        return OpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=api_key,
+        )
+
+    def _validate_response(self, response) -> bool:
+        """التحقق من صحة الرد من API"""
+        return (
+            response and
+            hasattr(response, 'choices') and
+            len(response.choices) > 0 and
+            hasattr(response.choices[0], 'message') and
+            hasattr(response.choices[0].message, 'content')
+        )
 
     def _clean_content(self, text: str, min_length: int) -> Tuple[Optional[str], bool]:
-        """تنظيف المحتوى مع تقرير إذا كان فارغاً"""
+        """تنظيف المحتوى مع تقرير الجودة"""
         if not text:
-            return None, True
-            
+            return None, False
+
+        # إزالة العبارات الشخصية
         text = re.sub(r'يَا?\s?[اأإآ]?[صش]اح?ب?ي?\b', '', text, flags=re.IGNORECASE)
         text = re.sub(r'\bخو?يَ?ا?\b', '', text, flags=re.IGNORECASE)
         
+        # التنظيف العام
         arabic_chars = r'[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]'
         symbols = r'[!؟.,،؛:\-\#@_()\d\s]'
         emojis = r'[\U0001F300-\U0001F6FF\u2600-\u26FF\u2700-\u27BF]'
@@ -44,94 +64,103 @@ class OpenAIService:
         cleaned = re.sub(f'[^{pattern}]', '', text)
         cleaned = re.sub(r'\s+', ' ', cleaned).strip()
         
-        if len(cleaned) < min_length:
-            return None, False
-            
-        return cleaned, True
+        return (cleaned, True) if len(cleaned) >= min_length else (None, False)
 
-    def _generate_safe_content(self, prompt: str, system_msg: str, platform: str) -> Optional[str]:
-        """إنشاء محتوى مع معالجة أخطاء شاملة"""
-        try:
-            response = self.client.chat.completions.create(
-                extra_headers={
-                    "HTTP-Referer": os.getenv('SITE_URL', 'https://default.com'),
-                    "X-Title": os.getenv('SITE_NAME', 'Content Generator'),
-                },
-                extra_body={"length_penalty": 1.5},
-                model="google/gemini-2.0-flash-thinking-exp:free",
-                messages=[
-                    {
-                        "role": "system", 
-                        "content": system_msg + "\n- يجب أن يكون المحتوى كاملاً ومفيداً"
-                    },
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.7,
-                max_tokens=800 if platform == 'لينكدإن' else 400,
-                timeout=60  # زيادة وقت الانتظار
-            )
-            
-            if not response or not response.choices:
-                logger.error("الرد من API غير صالح أو فارغ")
-                return None
+    def _generate_with_retry(self, prompt: str, system_msg: str, platform: str) -> Optional[str]:
+        """إنشاء المحتوى مع إعادة المحاولة"""
+        for attempt in range(self.max_attempts):
+            try:
+                start_time = time.time()
                 
-            return response.choices[0].message.content
-            
-        except Exception as e:
-            logger.error(f"خطأ في إنشاء المحتوى: {str(e)}")
-            return None
+                response = self.client.chat.completions.create(
+                    extra_headers={
+                        "HTTP-Referer": os.getenv('SITE_URL', 'https://default.com'),
+                        "X-Title": os.getenv('SITE_NAME', 'Content Generator'),
+                    },
+                    extra_body={
+                        "length_penalty": 1.5,
+                        "min_length": self.min_lengths[platform]
+                    },
+                    model="google/gemini-2.0-flash-thinking-exp:free",
+                    messages=[
+                        {
+                            "role": "system", 
+                            "content": system_msg + "\n\nتجنب:\n- مخاطبة القارئ مباشرة\n- المحتوى القصير\n- التكرار"
+                        },
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=0.75,
+                    max_tokens=800 if platform == 'لينكدإن' else 400,
+                    timeout=self.timeout
+                )
+
+                if not self._validate_response(response):
+                    logger.error(f"المحاولة {attempt + 1}: الرد غير صالح")
+                    continue
+
+                content = response.choices[0].message.content
+                cleaned, is_valid = self._clean_content(content, self.min_lengths[platform])
+
+                if is_valid and cleaned:
+                    logger.info(f"تم إنشاء المحتوى بنجاح في {time.time()-start_time:.2f} ثانية")
+                    return cleaned
+
+                logger.warning(f"المحاولة {attempt + 1}: المحتوى غير صالح - الطول: {len(content) if content else 0}")
+
+            except APIError as e:
+                logger.error(f"خطأ API في المحاولة {attempt + 1}: {str(e)}")
+                if attempt == self.max_attempts - 1:
+                    raise
+                time.sleep(2)  # إضافة تأخير بين المحاولات
+
+            except Exception as e:
+                logger.error(f"خطأ غير متوقع في المحاولة {attempt + 1}: {str(e)}")
+                if attempt == self.max_attempts - 1:
+                    raise
+
+        return None
 
     def generate_response(self, user_input: str, platform: str, dialect: Optional[str] = None) -> str:
-        """الدالة الرئيسية مع ضمانات إضافية"""
+        """الدالة الرئيسية المحسنة"""
         if not user_input or not platform:
             return "⚠️ المدخلات غير صالحة"
-            
+
         if platform not in self.emoji_sets:
             return f"⚠️ المنصة غير مدعومة. الخيارات: {', '.join(self.emoji_sets.keys())}"
 
-        dialect_guides = {
-            "اليمنية": "استخدم لهجة يمنية أصيلة بكلمات مثل: عادك، شوف، قدك، تمام، طيب، ابسر، صنديد",
-            "المصرية": "استخدم لهجة مصرية بكلمات مثل: خلاص، يعني، قوي، جامد، تمام، يلا، اهو",
-            "الشامية": "استخدم لهجة شامية بكلمات مثل: هلّق، شو القصة، كتير، منيح، بالهداوة",
-            "المغربية": "استخدم لهجة مغربية بكلمات مثل: واخا، بزاف، دابا، زعما، مزيان",
-            "الخليجية": "استخدم لهجة خليجية بكلمات مثل: بعد، زين، مره، عاد، وايد",
-            "الفصحى المبسطة": "استخدم لغة عربية فصيحة مبسطة"
+        dialect_instructions = {
+            "اليمنية": "استخدم لهجة يمنية أصيلة بكلمات مثل: عادك، شوف، قدك، تمام، طيب، ابسر، صنديد - بدون مخاطبة مباشرة",
+            "المصرية": "استخدم لهجة مصرية بكلمات مثل: خلاص، يعني، قوي، جامد، تمام، يلا، اهو - بشكل طبيعي",
+            "الشامية": "استخدم لهجة شامية بكلمات مثل: هلّق، شو القصة، كتير، منيح، بالهداوة - بأسلوب راقٍ",
+            "المغربية": "استخدم لهجة مغربية بكلمات مثل: واخا، بزاف، دابا، زعما، مزيان - بشكل مناسب",
+            "الخليجية": "استخدم لهجة خليجية بكلمات مثل: بعد، زين، مره، عاد، وايد - بأسلوب احترافي",
+            "الفصحى المبسطة": "استخدم لغة عربية فصيحة مبسطة وسهلة الفهم"
         }
 
         system_msg = f"""أنت كاتب محتوى عربي محترف لـ {platform}. اكتب منشورًا عن:
 "{user_input}"
 
-المتطلبات:
+المتطلبات الأساسية:
 1. المحتوى مفصل وغني بالمعلومات
-2. استخدم أسلوبًا {dialect_guides.get(dialect, 'احترافيًا')}
-3. الطول الأدنى: {self.min_lengths[platform]} حرف
-4. أضف {2 if platform == 'تويتر' else 3} إيموجي
-5. تجنب مخاطبة القارئ مباشرة"""
+2. الطول الأدنى: {self.min_lengths[platform]} حرف
+3. أضف {2 if platform == 'تويتر' else 3} إيموجي
+4. استخدم أسلوبًا {dialect_instructions.get(dialect, 'احترافيًا')}"""
 
-        for attempt in range(3):
-            try:
-                content = self._generate_safe_content(
-                    prompt=f"أنشئ منشور {platform} عن: {user_input}",
-                    system_msg=system_msg,
-                    platform=platform
-                )
-                
-                if not content:
-                    continue
-                    
-                cleaned, is_valid = self._clean_content(content, self.min_lengths[platform])
-                
-                if is_valid and cleaned:
-                    if not any(emoji in cleaned for emoji in self.emoji_sets[platform]):
-                        cleaned = f"{random.choice(self.emoji_sets[platform])} {cleaned}"
-                    return cleaned
-                    
-                logger.warning(f"المحاولة {attempt + 1}: المحتوى غير صالح - الطول: {len(content) if content else 0}")
-                
-            except Exception as e:
-                logger.error(f"المحاولة {attempt + 1} فشلت: {str(e)}")
+        try:
+            content = self._generate_with_retry(
+                prompt=f"أنشئ منشور {platform} عن: {user_input}",
+                system_msg=system_msg,
+                platform=platform
+            )
 
-        return "⚠️ فشل إنشاء محتوى يلبي المتطلبات. يرجى تعديل المدخلات والمحاولة مرة أخرى"
+            if content:
+                return content
+
+            return "⚠️ تعذر إنشاء محتوى يلبي المتطلبات. يرجى المحاولة لاحقًا"
+
+        except Exception as e:
+            logger.critical(f"فشل إنشاء المحتوى: {str(e)}")
+            return "⚠️ حدث خطأ غير متوقع. يرجى التواصل مع الدعم الفني"
 
 # تصدير الدالة
 openai_service = OpenAIService()
