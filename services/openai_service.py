@@ -84,7 +84,7 @@ def generate_twitter_post(user_input, dialect=None):
                 "HTTP-Referer": SITE_URL,
                 "X-Title": SITE_NAME,
             },
-            model="meta-llama/llama-4-maverick:free",
+           "model="mistralai/mistral-7b-instruct:free",
             messages=[
                 {"role": "system", "content": f"""
 أنت كاتب محتوى عربي محترف لمنصات التواصل.
@@ -113,7 +113,7 @@ def generate_response(user_input, platform, dialect=None, max_retries=None):
             "emojis": ["🔥", "💡", "🚀", "✨", "🎯"],
         },
         "لينكدإن": {
-            "model": "meta-llama/llama-4-maverick:free",
+            "model="mistralai/mistral-7b-instruct:free",
             "max_tokens": 600,
             "template": """
 أنت كاتب محتوى محترف لمنصة لينكدإن.
@@ -127,7 +127,7 @@ def generate_response(user_input, platform, dialect=None, max_retries=None):
             "emojis": ["💼", "📈", "🏆", "🔍", "🚀"],
         },
         "إنستغرام": {
-            "model": "meta-llama/llama-4-maverick:free",
+            "model="mistralai/mistral-7b-instruct:free",
             "max_tokens": 450,
             "template": """
 أنت صانع محتوى إنستغرام.
