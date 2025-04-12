@@ -3,197 +3,172 @@ import logging
 import os
 import random
 from openai import OpenAI
+from typing import Optional
 
 # إعدادات التسجيل
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('bot_errors.log', encoding='utf-8'),
+        logging.FileHandler('content_generator.log', encoding='utf-8'),
         logging.StreamHandler()
     ]
 )
+logger = logging.getLogger('ArabicContentGenerator')
 
-API_KEY = os.getenv('OPENROUTER_API_KEY')
-if not API_KEY:
-    logging.error("OPENROUTER_API_KEY غير موجود في متغيرات البيئة")
-
-SITE_URL = os.getenv('SITE_URL', 'https://your-site.com')
-SITE_NAME = os.getenv('SITE_NAME', 'My Bot')
-
-client = OpenAI(
-    base_url="https://openrouter.ai/api/v1",
-    api_key=API_KEY,
-)
-
-def clean_content(text):
-    if not text:
-        return ""
-    try:
-        arabic_chars = r'[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]'
-        allowed_symbols = r'[!؟.,،؛:\n\-#@_ ]'
-        emojis = r'[\U0001F300-\U0001F6FF\u2600-\u26FF\u2700-\u27BF]'
-        cleaned = re.sub(fr'[^\n{arabic_chars}{allowed_symbols}{emojis}]', '', str(text))
-        cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
-        cleaned = re.sub(r'[ ]{2,}', ' ', cleaned)
-        return cleaned.strip()
-    except Exception as e:
-        logging.error(f"خطأ في تنظيف النص: {str(e)}")
-        return str(text)[:500]
-
-def dialect_examples(dialect):
-    examples = {
-        "المغربية": """\
-- استعمل كلمات مثل: "واخّا"، "بزاف"، "دابا"، "خويا"، "نعيقو"، "زعما"، "خاي"، "عفاك"، "مزيان"، "حاجة زوينة"
-- اكتب باللهجة المغربية بأسلوب عام يناسب المنشورات العامة.
-- تجنب العبارات الدردشة الشخصية أو التحايا.
-- أدرج الكلمات ضمن الجمل بشكل منطقي طبيعي بدون مبالغة.
-""",
-        "المصرية": """\
-- استعمل كلمات زي: "يلا بينا"، "جامد أوي"، "كده يعني"، "بص يا معلم"، "حكاية"، "حلو جدًا"، "تمام التمام"، "إوعى تفوتك"، "من الآخر"، "على طول"
-- اكتب باللهجة المصرية بأسلوب عام يناسب المنشورات العامة.
-- تجنب صيغة الدردشة الشخصية.
-- أدرج الكلمات في سياق الجمل بشكل طبيعي.
-""",
-        "اليمنية": """\
-- استخدم كلمات مثل: "عادك"، "شوف"، "معك خبر؟"، "شوية"، "قدك"، "تمام"، "طيب"، "ابسر"، "احزر"، "خليك"، "مرتاح"، "مفتهن"، "ماشي"، "مافيش"، "شوعه"، "حالي"، "شمات"، "سابر"، "طافح"، "أيوه"، "وينك"، "فخر"، "شجاع"، "صنديد"، "قدوة"، "بطل"، "مواقف رجولية"
-- اكتب باللهجة اليمنية بأسلوب عام راقٍ يناسب المنشورات العامة.
-- تجنب العبارات الموجهة لشخص أو دردشة كـ: "عادك تتذكر؟" أو "أوريك"
-- أدرج الكلمات في سياق الجمل بشكل منطقي دون مبالغة.
-""",
-        "الشامية": """\
-- استعمل كلمات مثل: "هلّق"، "شو القصة"، "كتير"، "تمام"، "بالهداوة"، "منيح"، "ياريت"، "عنجد"، "بسيطة"، "عال العال"، "قديش"
-- اكتب باللهجة الشامية بأسلوب عام يناسب المنشورات العامة.
-- تجنب العبارات الحميمية أو الدردشة المباشرة.
-- أدرج الكلمات ضمن الجمل بشكل منطقي طبيعي.
-""",
-        "الخليجية": """\
-- استعمل كلمات مثل: "تصدق"، "زين"، "يا طويل العمر"، "وش السالفة"، "مرة"، "واجد"، "على طاري"، "حيل"، "يا بعد حيي"، "طيّب"، "معقولة"
-- اكتب باللهجة الخليجية بأسلوب عام يناسب المنشورات العامة.
-- تجنب صيغة السوالف أو المجالس.
-- أدرج الكلمات في سياق الجمل بشكل منطقي طبيعي.
-"""
-    }
-    return examples.get(dialect, "")
-
-def generate_twitter_post(user_input, dialect=None):
-    try:
-        style_note = f"\nاكتب باللهجة {dialect} بأسلوب راقٍ يناسب منشور عام.\n{dialect_examples(dialect)}" if dialect else ""
-        response = client.chat.completions.create(
-            extra_headers={
-                "HTTP-Referer": SITE_URL,
-                "X-Title": SITE_NAME,
-            },
-            model="meta-llama/llama-4-maverick:free",
-            messages=[
-                {"role": "system", "content": f"""
-أنت كاتب محتوى عربي محترف لمنصات التواصل.
-- أنشئ تغريدة جذابة حول الفكرة التالية.
-- استخدم أسلوبًا بسيطًا وواضحًا وراقيًا.
-- لا تكرر الصياغات الشائعة.
-- لا تستخدم هاشتاقات.
-- أضف إيموجي معبّرة حسب السياق.
-{style_note}
-""" },
-                {"role": "user", "content": user_input}
-            ],
-            temperature=0.7,
-            max_tokens=300,
-            timeout=25.0
-        )
-        return response.choices[0].message.content
-    except Exception as e:
-        logging.error(f"خطأ في إنشاء تغريدة: {str(e)}")
-        return None
-
-def generate_response(user_input, platform, dialect=None, max_retries=None):
-    platform_config = {
-        "تويتر": {
-            "generator": generate_twitter_post,
-            "emojis": ["🔥", "💡", "🚀", "✨", "🎯"],
-        },
-        "لينكدإن": {
-            "model": "meta-llama/llama-4-maverick:free",
-            "max_tokens": 600,
-            "template": """
-أنت كاتب محتوى محترف لمنصة لينكدإن.
-أنشئ منشورًا مهنيًا واضحًا يتحدث عن: "{input}"
-- اجعل الفكرة الأساسية واضحة من البداية
-- أضف ثلاث نقاط أو خطوات عملية
-- أنهِ المنشور برسالة ملهمة أو نصيحة
-- استخدم أسلوب بسيط راقٍ
-- لا تضف هاشتاقات
-""",
-            "emojis": ["💼", "📈", "🏆", "🔍", "🚀"],
-        },
-        "إنستغرام": {
-            "model": "meta-llama/llama-4-maverick:free",
-            "max_tokens": 450,
-            "template": """
-أنت صانع محتوى إنستغرام.
-اكتب منشورًا ملهمًا أو تحفيزيًا عن: "{input}"
-- اجعل الأسلوب مشوقًا وعاطفيًا
-- استخدم جمل قصيرة
-- أضف إيموجي معبرة
-- لا تضف هاشتاقات
-""",
-            "emojis": ["❤️", "🌟", "📸", "💫", "🌈"],
-        }
-    }
-
-    if not API_KEY:
-        return "⚠️ يرجى التحقق من إعدادات النظام (مفتاح API مفقود)"
-
-    if platform not in platform_config:
-        return f"⚠️ المنصة غير مدعومة. الخيارات: {', '.join(platform_config.keys())}"
-
-    try:
-        max_retries = int(max_retries)
-    except (TypeError, ValueError):
-        max_retries = 3
-
-    for attempt in range(max_retries):
+class OpenAIService:
+    def __init__(self):
+        """تهيئة الخدمة بشكل آمن"""
         try:
-            logging.info(f"جاري إنشاء منشور لـ {platform} - المحاولة {attempt + 1}")
+            self.client = OpenAI(
+                base_url="https://openrouter.ai/api/v1",
+                api_key=os.getenv('OPENROUTER_API_KEY', '')
+            )
+            self._validate_client()
+        except Exception as e:
+            logger.critical(f"فشل تهيئة العميل: {str(e)}")
+            self.client = None
 
-            if platform == "تويتر":
-                content = platform_config[platform]["generator"](user_input, dialect)
-                if not content:
-                    raise ValueError("فشل إنشاء التغريدة")
-            else:
-                cfg = platform_config[platform]
-                style_note = f"\nاكتب باللهجة {dialect} بأسلوب عام.\n{dialect_examples(dialect)}" if dialect else ""
-                system_prompt = cfg["template"].format(input=user_input) + style_note
-                user_prompt = f"أنشئ منشورًا إبداعيًا. استخدم هذه الإيموجي: {', '.join(random.sample(cfg['emojis'], 3))}"
+        # إعدادات المحتوى
+        self.platform_settings = {
+            'تويتر': {
+                'emojis': ["🐦", "💬", "🔄", "❤️", "👏"],
+                'min_length': 50,
+                'max_tokens': 280
+            },
+            'لينكدإن': {
+                'emojis': ["💼", "📈", "🌐", "🤝", "🏆"],
+                'min_length': 150,
+                'max_tokens': 600
+            },
+            'إنستغرام': {
+                'emojis': ["📸", "❤️", "👍", "😍", "🔥"],
+                'min_length': 80,
+                'max_tokens': 300
+            }
+        }
 
-                response = client.chat.completions.create(
-                    extra_headers={
-                        "HTTP-Referer": SITE_URL,
-                        "X-Title": SITE_NAME,
-                    },
-                    model=cfg["model"],
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt}
-                    ],
-                    temperature=0.75,
-                    max_tokens=cfg["max_tokens"],
-                    timeout=30.0
-                )
-                content = response.choices[0].message.content
+    def _validate_client(self):
+        """التحقق من صحة العميل"""
+        if not self.client or not os.getenv('OPENROUTER_API_KEY'):
+            raise ValueError("إعدادات API غير صالحة")
 
-            cleaned = clean_content(content)
-            if not cleaned or len(cleaned) < 50:
-                raise ValueError("النص الناتج غير كافٍ")
+    def _clean_content(self, text: str, platform: str) -> Optional[str]:
+        """تنظيف المحتوى مع ضمان الجودة"""
+        if not text or not isinstance(text, str):
+            return None
 
-            if not any(emoji in cleaned for emoji in platform_config[platform]["emojis"]):
-                cleaned = f"{random.choice(platform_config[platform]['emojis'])} {cleaned}"
+        try:
+            # التنظيف الأساسي
+            text = re.sub(r'يَا?\s?[اأإآ]?[صش]اح?ب?ي?\b', '', text)
+            text = re.sub(r'\bخو?يَ?ا?\b', '', text)
+            
+            # الاحتفاظ بالأحرف المسموحة فقط
+            allowed_chars = r'[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF!؟.,،؛:\-\#@_()\d\s\U0001F300-\U0001F6FF\u2600-\u26FF\u2700-\u27BF]'
+            cleaned = re.sub(f'[^{allowed_chars}]', '', text)
+            cleaned = re.sub(r'\s+', ' ', cleaned).strip()
 
-            logging.info("تم إنشاء المنشور بنجاح")
-            return cleaned
+            # التحقق من الطول الأدنى
+            if len(cleaned) >= self.platform_settings[platform]['min_length']:
+                return cleaned
+            return None
 
         except Exception as e:
-            logging.error(f"خطأ في المحاولة {attempt + 1}: {str(e)}")
-            continue
+            logger.error(f"خطأ في تنظيف المحتوى: {str(e)}")
+            return None
 
-    return "⚠️ فشل إنشاء المنشور. يرجى:\n- التأكد من الاتصال\n- المحاولة لاحقًا"
+    def generate_response(self, user_input: str, platform: str, dialect: Optional[str] = None) -> str:
+        """الدالة الرئيسية لإنشاء المحتوى"""
+        try:
+            # التحقق من الإعدادات الأولية
+            if not self.client:
+                logger.error("العميل غير مهيأ - تحقق من OPENROUTER_API_KEY")
+                return "⚠️ الخدمة غير متاحة حالياً"
+
+            if platform not in self.platform_settings:
+                return f"⚠️ المنصة غير مدعومة. الخيارات: {', '.join(self.platform_settings.keys())}"
+
+            # تعليمات النظام
+            system_template = """أنت كاتب محتوى عربي محترف لـ {platform}. اكتب منشورًا عن:
+"{topic}"
+
+المتطلبات:
+- المحتوى مفيد وجذاب
+- الطول المناسب للمنصة
+- أسلوب {dialect_instruction}
+- {emoji_count} إيموجي مناسبة"""
+
+            dialect_instruction = f"لهجة {dialect}" if dialect else "فصيح"
+            settings = self.platform_settings[platform]
+
+            try:
+                response = self.client.chat.completions.create(
+                    extra_headers={
+                        "HTTP-Referer": os.getenv('SITE_URL', 'https://default.com'),
+                        "X-Title": os.getenv('SITE_NAME', 'Content Generator'),
+                    },
+                    model="google/gemini-2.0-flash-thinking-exp:free",
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": system_template.format(
+                                platform=platform,
+                                topic=user_input,
+                                dialect_instruction=dialect_instruction,
+                                emoji_count="2-3"
+                            )
+                        },
+                        {
+                            "role": "user",
+                            "content": f"أنشئ منشور {platform} عن: {user_input}"
+                        }
+                    ],
+                    temperature=0.7,
+                    max_tokens=settings['max_tokens'],
+                    timeout=30
+                )
+            except Exception as api_error:
+                logger.error(f"فشل طلب API: {str(api_error)}")
+                return "⚠️ فشل الاتصال بالخدمة. يرجى المحاولة لاحقًا"
+
+            # التحقق من صحة الرد
+            if response is None:
+                logger.error("رد API فارغ")
+                raise ValueError("فشل الاتصال بالخدمة: لا يوجد رد من API")
+
+            if not hasattr(response, 'choices'):
+                logger.error(f"رد API غير صالح: {str(response)}")
+                raise ValueError("رد API غير صالح أو لا يحتوي على خيارات")
+
+            if not response.choices:
+                logger.error("رد API لا يحتوي على خيارات")
+                raise ValueError("رد API فارغ (لا توجد خيارات)")
+
+            # معالجة الرد
+            content = response.choices[0].message.content
+            cleaned_content = self._clean_content(content, platform)
+
+            if not cleaned_content:
+                logger.error(f"المحتوى الناتج غير صالح: {content}")
+                raise ValueError("المحتوى الناتج غير صالح")
+
+            # إضافة إيموجي إذا لزم الأمر
+            if not any(emoji in cleaned_content for emoji in settings['emojis']):
+                cleaned_content = f"{random.choice(settings['emojis'])} {cleaned_content}"
+
+            return cleaned_content
+
+        except ValueError as ve:
+            logger.error(f"خطأ في القيمة: {str(ve)}")
+            return f"⚠️ {str(ve)}"
+        except Exception as e:
+            logger.error(f"فشل إنشاء المحتوى: {str(e)}", exc_info=True)
+            return "⚠️ حدث خطأ أثناء إنشاء المحتوى. يرجى المحاولة لاحقًا"
+
+# تهيئة الخدمة وتصدير الدالة
+try:
+    openai_service = OpenAIService()
+    generate_response = openai_service.generate_response
+except Exception as e:
+    logger.critical(f"فشل تهيئة الخدمة: {str(e)}", exc_info=True)
+    generate_response = lambda *args, **kwargs: "⚠️ الخدمة غير متاحة حالياً"
