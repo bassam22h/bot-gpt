@@ -43,31 +43,40 @@ def clean_content(text):
 
 def generate_twitter_post(user_input, dialect=None):
     try:
-        style_note = f"\nاكتب باللهجة {dialect} بأسلوب شبابي واضح وعمومي، دون مبالغة في العفوية أو لهجة الجلسات. تجنب الحشو وكن مباشرًا." if dialect else ""
+        dialect_note = f"\nاكتب باللهجة {dialect} بشكل واضح ومباشر دون مبالغة أو كلمات جلسات، وبأسلوب عام مبسط." if dialect else ""
+
         response = client.chat.completions.create(
             extra_headers={
                 "HTTP-Referer": SITE_URL,
                 "X-Title": SITE_NAME,
             },
-            model="mistralai/mistral-7b-instruct:free",
+            model="google/gemini-2.0-flash-thinking-exp:free",
             messages=[
-                {"role": "system", "content": f"""
-أنت كاتب محتوى عربي محترف.
-أنشئ منشورًا جذابًا حول الفكرة التالية.
-- اجعل الأسلوب بسيطًا، مفهومًا، ومباشرًا.
-- اكتب باللهجة {dialect} دون مبالغة أو استخدام كلمات جلسات.
-- لا تكرّر العبارات المبتذلة.
-- أضف إيموجي مناسبة ضمن السياق.
+                {
+                    "role": "system",
+                    "content": f"""
+أنت كاتب محتوى محترف.
+مهمتك كتابة منشور جذاب وعام حول الفكرة المطلوبة.
+- اجعل الأسلوب بسيطًا ومباشرًا وواضحًا.
+- اكتب باللهجة المطلوبة دون مبالغة.
+- لا تستخدم أسلوب جلسات مقيل.
+- أضف إيموجي مناسبة ضمن النص.
 - لا تستخدم هاشتاقات.
-{style_note}
-""" },
-                {"role": "user", "content": user_input}
+{dialect_note}
+                    """
+                },
+                {
+                    "role": "user",
+                    "content": user_input
+                }
             ],
             temperature=0.7,
             max_tokens=350,
             timeout=25.0
         )
+
         return response.choices[0].message.content
+
     except Exception as e:
         logging.error(f"خطأ في إنشاء المنشور: {str(e)}")
         return None
