@@ -3,153 +3,113 @@ import logging
 import os
 import random
 from openai import OpenAI
-from typing import Optional
+from typing import Optional, Dict
 
-# إعدادات التسجيل
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('content_generator.log', encoding='utf-8'),
-        logging.StreamHandler()
-    ]
-)
 logger = logging.getLogger('ArabicContentGenerator')
 
 class OpenAIService:
     def __init__(self):
-        """تهيئة الخدمة بشكل آمن"""
-        try:
-            self.client = OpenAI(
-                base_url="https://openrouter.ai/api/v1",
-                api_key=os.getenv('OPENROUTER_API_KEY', '')
-            )
-            self._validate_client()
-        except Exception as e:
-            logger.critical(f"فشل تهيئة العميل: {str(e)}")
-            self.client = None
-
-        # إعدادات المحتوى
-        self.platform_settings = {
-            'تويتر': {
-                'emojis': ["🐦", "💬", "🔄", "❤️", "👏"],
-                'min_length': 50,
-                'max_tokens': 280
-            },
-            'لينكدإن': {
-                'emojis': ["💼", "📈", "🌐", "🤝", "🏆"],
-                'min_length': 150,
-                'max_tokens': 600
-            },
-            'إنستغرام': {
-                'emojis': ["📸", "❤️", "👍", "😍", "🔥"],
-                'min_length': 80,
-                'max_tokens': 300
-            }
+        self.client = self._initialize_client()
+        self.dialect_guides = {
+            "الفصحى المبسطة": "استخدم لغة عربية واضحة وسهلة بدون تعقيد",
+            "اليمنية": "استخدم: عادك، شوف، معك خبر؟، شوية، قدك، تمام، طيب، ابسر",
+            "الخليجية": "استخدم: بعد، زين، مره، عاد، وايد، على طاري، حيل",
+            "المصرية": "استخدم: خلاص، يعني، قوي، جامد، تمام، يلا، بص، اهو",
+            "الشامية": "استخدم: هلّق، شو القصة، كتير، تمام، بالهداوة، منيح",
+            "المغربية": "استخدم: واخا، بزاف، دابا، خويا، زعما، مزيان، هاد"
+        }
+        self.emoji_sets = {
+            'تويتر': ["🐦", "💬", "🔄", "❤️", "👏"],
+            'لينكدإن': ["💼", "📈", "🌐", "🤝", "🏆"],
+            'إنستغرام': ["📸", "❤️", "👍", "😍", "🔥"]
+        }
+        self.min_lengths = {
+            'تويتر': 50,  # زيادة الحد الأدنى
+            'لينكدإن': 150,
+            'إنستغرام': 80
         }
 
-    def _validate_client(self):
-        """التحقق من صحة العميل"""
-        if not self.client or not os.getenv('OPENROUTER_API_KEY'):
-            raise ValueError("إعدادات API غير صالحة")
+    def _initialize_client(self) -> OpenAI:
+        api_key = os.getenv('OPENROUTER_API_KEY')
+        if not api_key:
+            raise ValueError("OPENROUTER_API_KEY is required")
+        return OpenAI(base_url="https://openrouter.ai/api/v1", api_key=api_key)
 
-    def _clean_content(self, text: str, platform: str) -> Optional[str]:
-        """تنظيف المحتوى مع ضمان الجودة"""
-        if not text or not isinstance(text, str):
+    def _ensure_content_quality(self, text: str, platform: str) -> Optional[str]:
+        """تحقق من جودة المحتوى وأضف إيموجي إذا لزم"""
+        if not text or len(text.strip()) < self.min_lengths[platform]:
             return None
 
-        try:
-            # التنظيف الأساسي
-            text = re.sub(r'يَا?\s?[اأإآ]?[صش]اح?ب?ي?\b', '', text)
-            text = re.sub(r'\bخو?يَ?ا?\b', '', text)
-            
-            # الاحتفاظ بالأحرف المسموحة فقط
-            allowed_chars = r'[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF!؟.,،؛:\-\#@_()\d\s\U0001F300-\U0001F6FF\u2600-\u26FF\u2700-\u27BF]'
-            cleaned = re.sub(f'[^{allowed_chars}]', '', text)
-            cleaned = re.sub(r'\s+', ' ', cleaned).strip()
+        # تنظيف النص
+        arabic_pattern = r'[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]'
+        symbols = r'[!؟.,،؛:\-\#@_()\d\s]'
+        emojis = r'[\U0001F300-\U0001F6FF\u2600-\u26FF\u2700-\u27BF]'
+        pattern = f'[{arabic_pattern}{symbols}{emojis}]'
+        
+        cleaned = re.sub(f'[^{pattern}]', '', text)
+        cleaned = re.sub(r'\s+', ' ', cleaned).strip()
 
-            # التحقق من الطول الأدنى
-            if len(cleaned) >= self.platform_settings[platform]['min_length']:
-                return cleaned
-            return None
+        if not any(emoji in cleaned for emoji in self.emoji_sets[platform]):
+            cleaned = f"{random.choice(self.emoji_sets[platform])} {cleaned}"
+        
+        return cleaned if len(cleaned) >= self.min_lengths[platform] else None
 
-        except Exception as e:
-            logger.error(f"خطأ في تنظيف المحتوى: {str(e)}")
-            return None
+    def _generate_with_retry(self, prompt: str, system_msg: str, platform: str, max_retries: int = 3) -> Optional[str]:
+        """دالة أساسية مع إعادة المحاولة وتحسين الطلبات"""
+        for attempt in range(max_retries):
+            try:
+                response = self.client.chat.completions.create(
+                    extra_headers={
+                        "HTTP-Referer": os.getenv('SITE_URL', 'https://default.com'),
+                        "X-Title": os.getenv('SITE_NAME', 'Content Generator'),
+                    },
+                    extra_body={"length_penalty": 1.5},  # تشجيع النموذج على إنتاج محتوى أطول
+                    model="google/gemini-2.0-flash-thinking-exp:free",
+                    messages=[
+                        {"role": "system", "content": f"{system_msg}\n- يجب أن يكون المحتوى مفصلًا ووافيًا"},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=0.8,  # زيادة الإبداع قليلاً
+                    max_tokens=400 if platform == 'تويتر' else 800,
+                    timeout=45
+                )
+                
+                content = response.choices[0].message.content
+                if quality_content := self._ensure_content_quality(content, platform):
+                    return quality_content
+                
+                logger.warning(f"المحاولة {attempt+1}: المحتوى قصير - الطول: {len(content)}")
+            except Exception as e:
+                logger.error(f"المحاولة {attempt+1} فشلت: {str(e)}")
+        
+        return None
 
     def generate_response(self, user_input: str, platform: str, dialect: Optional[str] = None) -> str:
-        """الدالة الرئيسية لإنشاء المحتوى"""
-        try:
-            # التحقق من الإعدادات الأولية
-            if not self.client:
-                return "⚠️ الخدمة غير متاحة حالياً"
+        """الدالة الرئيسية المعدلة مع تحسينات الجودة"""
+        if platform not in self.emoji_sets:
+            return "⚠️ المنصة غير مدعومة. الخيارات: تويتر، لينكدإن، إنستغرام"
 
-            if platform not in self.platform_settings:
-                return f"⚠️ المنصة غير مدعومة. الخيارات: {', '.join(self.platform_settings.keys())}"
-
-            # تعليمات النظام
-            system_template = """أنت كاتب محتوى عربي محترف لـ {platform}. اكتب منشورًا عن:
-"{topic}"
+        style_note = f"\n\nاستخدم اللهجة {dialect}:\n{self.dialect_guides.get(dialect, '')}" if dialect else ""
+        
+        system_msg = f"""أنت كاتب محتوى عربي محترف لـ {platform}. اكتب منشورًا عن:
+"{user_input}"
+{style_note}
 
 المتطلبات:
-- المحتوى مفيد وجذاب
-- الطول المناسب للمنصة
-- أسلوب {dialect_instruction}
-- {emoji_count} إيموجي مناسبة"""
+1. المحتوى مفصل وغني بالمعلومات
+2. استخدم لغة طبيعية وسلسة
+3. أضف {2 if platform == 'تويتر' else 3} إيموجي
+4. تجنب التكرار
+5. الطول الأدنى: {self.min_lengths[platform]} حرف"""
 
-            dialect_instruction = f"لهجة {dialect}" if dialect else "فصيح"
-            settings = self.platform_settings[platform]
+        result = self._generate_with_retry(
+            prompt=f"أنشئ منشور {platform} عن: {user_input}",
+            system_msg=system_msg,
+            platform=platform
+        )
 
-            response = self.client.chat.completions.create(
-                extra_headers={
-                    "HTTP-Referer": os.getenv('SITE_URL', 'https://default.com'),
-                    "X-Title": os.getenv('SITE_NAME', 'Content Generator'),
-                },
-                model="google/gemini-2.0-flash-thinking-exp:free",
-                messages=[
-                    {
-                        "role": "system",
-                        "content": system_template.format(
-                            platform=platform,
-                            topic=user_input,
-                            dialect_instruction=dialect_instruction,
-                            emoji_count="2-3"
-                        )
-                    },
-                    {
-                        "role": "user",
-                        "content": f"أنشئ منشور {platform} عن: {user_input}"
-                    }
-                ],
-                temperature=0.7,
-                max_tokens=settings['max_tokens'],
-                timeout=30
-            )
+        return result or "⚠️ تعذر إنشاء محتوى يلبي متطلبات الجودة. يرجى المحاولة مرة أخرى"
 
-            # معالجة الرد
-            if not response.choices:
-                raise ValueError("رد API فارغ")
-
-            content = response.choices[0].message.content
-            cleaned_content = self._clean_content(content, platform)
-
-            if not cleaned_content:
-                raise ValueError("المحتوى الناتج غير صالح")
-
-            # إضافة إيموجي إذا لزم الأمر
-            if not any(emoji in cleaned_content for emoji in settings['emojis']):
-                cleaned_content = f"{random.choice(settings['emojis'])} {cleaned_content}"
-
-            return cleaned_content
-
-        except Exception as e:
-            logger.error(f"فشل إنشاء المحتوى: {str(e)}")
-            return "⚠️ حدث خطأ أثناء إنشاء المحتوى. يرجى المحاولة لاحقًا"
-
-# تهيئة الخدمة وتصدير الدالة
-try:
-    openai_service = OpenAIService()
-    generate_response = openai_service.generate_response
-except Exception as e:
-    logger.critical(f"فشل تهيئة الخدمة: {str(e)}")
-    generate_response = lambda *args, **kwargs: "⚠️ الخدمة غير متاحة حالياً"
+# تصدير الدالة
+openai_service = OpenAIService()
+generate_response = openai_service.generate_response
