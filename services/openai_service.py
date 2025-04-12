@@ -26,24 +26,24 @@ class OpenAIService:
             )
             self._validate_client()
         except Exception as e:
-            logger.critical(f"فشل تهيئة العميل: {str(e)}")
+            logger.critical(f"فشل تهيئة العميل: {str(e)}", exc_info=True)
             self.client = None
 
         # إعدادات المحتوى
         self.platform_settings = {
             'تويتر': {
                 'emojis': ["🐦", "💬", "🔄", "❤️", "👏"],
-                'min_length': 50,
+                'min_length': 30,  # تم تخفيض الحد الأدنى
                 'max_tokens': 280
             },
             'لينكدإن': {
                 'emojis': ["💼", "📈", "🌐", "🤝", "🏆"],
-                'min_length': 150,
+                'min_length': 100,  # تم تخفيض الحد الأدنى
                 'max_tokens': 600
             },
             'إنستغرام': {
                 'emojis': ["📸", "❤️", "👍", "😍", "🔥"],
-                'min_length': 80,
+                'min_length': 50,  # تم تخفيض الحد الأدنى
                 'max_tokens': 300
             }
         }
@@ -55,10 +55,11 @@ class OpenAIService:
 
     def _clean_content(self, text: str, platform: str) -> Optional[str]:
         """تنظيف المحتوى مع ضمان الجودة"""
-        if not text or not isinstance(text, str):
-            return None
-
         try:
+            if not text or not isinstance(text, str):
+                logger.warning(f"نص الإدخال غير صالح: {text}")
+                return None
+
             # التنظيف الأساسي
             text = re.sub(r'يَا?\s?[اأإآ]?[صش]اح?ب?ي?\b', '', text)
             text = re.sub(r'\bخو?يَ?ا?\b', '', text)
@@ -68,13 +69,19 @@ class OpenAIService:
             cleaned = re.sub(f'[^{allowed_chars}]', '', text)
             cleaned = re.sub(r'\s+', ' ', cleaned).strip()
 
-            # التحقق من الطول الأدنى
-            if len(cleaned) >= self.platform_settings[platform]['min_length']:
+            # تسجيل المحتوى قبل التحقق من الطول
+            logger.debug(f"المحتوى بعد التنظيف وقبل التحقق: {cleaned}")
+
+            # تعديل شرط الطول ليكون أكثر مرونة
+            min_len = self.platform_settings[platform]['min_length']
+            if len(cleaned) >= min_len:
                 return cleaned
-            return None
+            else:
+                logger.warning(f"المحتوى قصير جدًا ({len(cleaned)} حرفًا)، المطلوب {min_len}")
+                return None
 
         except Exception as e:
-            logger.error(f"خطأ في تنظيف المحتوى: {str(e)}")
+            logger.error(f"خطأ في التنظيف: {str(e)}", exc_info=True)
             return None
 
     def generate_response(self, user_input: str, platform: str, dialect: Optional[str] = None) -> str:
@@ -128,29 +135,30 @@ class OpenAIService:
                     timeout=30
                 )
             except Exception as api_error:
-                logger.error(f"فشل طلب API: {str(api_error)}")
+                logger.error(f"فشل طلب API: {str(api_error)}", exc_info=True)
                 return "⚠️ فشل الاتصال بالخدمة. يرجى المحاولة لاحقًا"
 
             # التحقق من صحة الرد
             if response is None:
                 logger.error("رد API فارغ")
-                raise ValueError("فشل الاتصال بالخدمة: لا يوجد رد من API")
+                return "⚠️ لا يوجد رد من الخدمة"
 
             if not hasattr(response, 'choices'):
                 logger.error(f"رد API غير صالح: {str(response)}")
-                raise ValueError("رد API غير صالح أو لا يحتوي على خيارات")
+                return "⚠️ هيكل الرد غير متوقع"
 
             if not response.choices:
                 logger.error("رد API لا يحتوي على خيارات")
-                raise ValueError("رد API فارغ (لا توجد خيارات)")
+                return "⚠️ لا توجد خيارات متاحة في الرد"
 
             # معالجة الرد
             content = response.choices[0].message.content
-            cleaned_content = self._clean_content(content, platform)
+            logger.debug(f"المحتوى الخام من API: {content}")
 
+            cleaned_content = self._clean_content(content, platform)
             if not cleaned_content:
-                logger.error(f"المحتوى الناتج غير صالح: {content}")
-                raise ValueError("المحتوى الناتج غير صالح")
+                logger.error(f"المحتوى الناتج غير صالح:\nالخام: {content}")
+                return "⚠️ المحتوى الناتج لا يلبي الشروط المطلوبة"
 
             # إضافة إيموجي إذا لزم الأمر
             if not any(emoji in cleaned_content for emoji in settings['emojis']):
@@ -158,12 +166,9 @@ class OpenAIService:
 
             return cleaned_content
 
-        except ValueError as ve:
-            logger.error(f"خطأ في القيمة: {str(ve)}")
-            return f"⚠️ {str(ve)}"
         except Exception as e:
-            logger.error(f"فشل إنشاء المحتوى: {str(e)}", exc_info=True)
-            return "⚠️ حدث خطأ أثناء إنشاء المحتوى. يرجى المحاولة لاحقًا"
+            logger.error(f"خطأ غير متوقع: {str(e)}", exc_info=True)
+            return "⚠️ حدث خطأ غير متوقع. يرجى المحاولة لاحقًا"
 
 # تهيئة الخدمة وتصدير الدالة
 try:
